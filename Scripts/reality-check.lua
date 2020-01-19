@@ -44,15 +44,17 @@ RC_ANALYZE_FPS_THRESHOLD                        = 20.0 -- count number of record
 RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL         = 5    -- number of triggering records in analyzed time window to interpret as critical
 
 -- - ground speed factor (approximate externally observed time dilation factor)
-RC_ANALYZE_GS_FACTOR_THRESHOLD1                 = 0.95 -- "warning" level
-RC_ANALYZE_GS_FACTOR_THRESHOLD2                 = 0.85 -- "critical" level
+RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1         = 0.95 -- "warning" level for average of all records
+RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2         = 0.85 -- "critical" level for average of all records
+RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD1          = 0.80 -- "warning" level of a single record
+RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD2          = 0.70 -- "critical" level of a single record
 
 -- - cumulative error in distance (externally observed cumulative time dilation position error)
 RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 = 0.75 -- "warning" level in nautical miles
 RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 = 1.50 -- "critical" level in nautical miles
 
 -- How many FPS/GS warnings (including critical level) are needed to start notifying user?
--- Warnings resulting from distance errors are always shown.
+-- Warnings resulting from distance errors and average values are always shown.
 RC_NOTIFICATION_THRESHOLD = 2
 
 -- Where should the notification be printed? (Y coordinate starts at bottom!)
@@ -174,8 +176,8 @@ function RC_Analyze()
 	gs_factor_avg = nil
 	gs_factor_max = 0.0
 	gs_factor_sum = 0.0
-	gs_factor_below_threshold1 = 0
-	gs_factor_below_threshold2 = 0
+	gs_factor_single_below_threshold1 = 0
+	gs_factor_single_below_threshold2 = 0
 	
 	distance_indicated = 0.0
 	distance_externally_perceived = 0.0
@@ -220,10 +222,10 @@ function RC_Analyze()
 			end
 			gs_factor_sum = gs_factor_sum + gs_factor
 			
-			if gs_factor <= RC_ANALYZE_GS_FACTOR_THRESHOLD2 then
-				gs_factor_below_threshold2 = gs_factor_below_threshold2 + 1
-			elseif gs_factor <= RC_ANALYZE_GS_FACTOR_THRESHOLD1 then
-				gs_factor_below_threshold1 = gs_factor_below_threshold1 + 1
+			if gs_factor <= RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD2 then
+				gs_factor_single_below_threshold2 = gs_factor_single_below_threshold2 + 1
+			elseif gs_factor <= RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD1 then
+				gs_factor_single_below_threshold1 = gs_factor_single_below_threshold1 + 1
 			end
 			
 			distance_indicated = distance_indicated + (gs_slowest_indicated * diff_time / 3600)
@@ -261,15 +263,15 @@ function RC_Analyze()
 	if RC_DEBUG then
 		print(string.format("analyzed data for last %.1f seconds", oldest_record_age))
 		print(string.format("FPS min %.1f / avg %.1f / max %.1f, WARN: %d", fps_min, fps_avg, fps_max, fps_below_threshold))
-		print(string.format("GSx min %.2f / avg %.2f / max %.2f, WARN: %d, CRIT: %d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_below_threshold1, gs_factor_below_threshold2))
+		print(string.format("GSx min %.2f / avg %.2f / max %.2f, WARN: %d, CRIT: %d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_single_below_threshold1, gs_factor_single_below_threshold2))
 		print(string.format("cumulative distance indicated %.2f nm / externally perceived %.2f nm / error %.2f nm / warn level %d", distance_indicated, distance_externally_perceived, distance_error, distance_error_level))
 	end
 	
 	fps_warning = fps_below_threshold >= RC_NOTIFICATION_THRESHOLD
 	fps_critical = fps_below_threshold >= RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL
 	
-	gsx_warning = gs_factor_below_threshold1 >= RC_NOTIFICATION_THRESHOLD
-	gsx_critical = (gs_factor_below_threshold1 + gs_factor_below_threshold2) >= RC_NOTIFICATION_THRESHOLD
+	gsx_warning = gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or gs_factor_single_below_threshold1 >= RC_NOTIFICATION_THRESHOLD
+	gsx_critical = gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or(gs_factor_single_below_threshold1 + gs_factor_single_below_threshold2) >= RC_NOTIFICATION_THRESHOLD
 	
 	if fps_critical or gsx_critical or distance_error_level > 1 then
 		rc_notify_level = 2
@@ -292,7 +294,7 @@ function RC_Analyze()
 			rc_notification_text = rc_notification_text .. " /"
 		end
 	
-		rc_notification_text = rc_notification_text .. string.format(" GSx %.2f/%.2f/%.2f W%d C%d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_below_threshold1, gs_factor_below_threshold2)
+		rc_notification_text = rc_notification_text .. string.format(" GSx %.2f/%.2f/%.2f W%d C%d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_single_below_threshold1, gs_factor_single_below_threshold2)
 		has_preceding_text = true
 	end
 	
