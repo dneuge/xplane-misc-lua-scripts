@@ -67,6 +67,7 @@ function RC_Count()
 	slowest_indicated_ground_speed_meters_per_second = 9999.99
 	first_record = nil
 	last_record = nil
+	num_records = #rc_records
 	
 	for i,record in ipairs(rc_records) do
 		ground_speed_meters_per_second = record[4]
@@ -96,7 +97,9 @@ function RC_Count()
 	externally_perceived_ground_speed = great_circle_distance / diff_time * 3600
 	ground_speed_factor = externally_perceived_ground_speed / slowest_indicated_ground_speed
 	
-	print(string.format("%0.2f %0.5f %0.2f %0.2f %0.2f", diff_time, great_circle_distance, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor))
+	fps = num_records / diff_time
+	
+	print(string.format("%.2f %.1f %.5f %.2f %.2f %.2f", diff_time, fps, great_circle_distance, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor))
 end
 
 function RC_Record()
