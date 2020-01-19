@@ -348,7 +348,7 @@ function RC_OpenWindow()
 		return
 	end
 	
-	rc_window = float_wnd_create(420, 260, 1, true)
+	rc_window = float_wnd_create(420, 280, 1, true)
 	float_wnd_set_title(rc_window, "Reality Check")
 	float_wnd_set_imgui_builder(rc_window, "RC_BuildWindow")
 	float_wnd_set_onclose(rc_window, "RC_OnCloseWindow")
@@ -417,6 +417,24 @@ function RC_BuildWindow(wnd, x, y)
 	end
 
 	imgui.TextUnformatted("")
+	
+	text = "within expected range."
+	if gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 then
+		color = red
+		text = "below critical threshold."
+	elseif gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 then
+		color = yellow
+		text = "below warning threshold."
+	end
+	if color then
+		imgui.PushStyleColor(imgui.constant.Col.Text, color)
+	end
+	imgui.TextUnformatted("Average GS factor is "..text)
+	if color then
+		imgui.PopStyleColor()
+		color = nil
+	end
+	
 	if distance_error_level == 0 then
 		imgui.TextUnformatted("Cumulative distance is within expected range.")
 	elseif distance_error_level == 1 then
