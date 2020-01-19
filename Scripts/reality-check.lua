@@ -79,6 +79,26 @@ rc_ring = {}
 rc_last_analyze = 0.0
 rc_notify_level = 0
 rc_notification_text = ""
+rc_notification_activated = true
+
+fps_min = 99999.99
+fps_avg = nil
+fps_max = 0.0
+fps_sum = 0.0
+fps_below_threshold = 0
+
+gs_factor_min = 99999.99
+gs_factor_avg = nil
+gs_factor_max = 0.0
+gs_factor_sum = 0.0
+gs_factor_single_below_threshold1 = 0
+gs_factor_single_below_threshold2 = 0
+
+distance_indicated = 0.0
+distance_externally_perceived = 0.0
+distance_error = nil
+
+rc_window = nil
 
 function greatCircleDistanceInMetersByHaversine(latitude1, longitude1, latitude2, longitude2)
 	latitude1Radians = math.rad(latitude1)
@@ -235,7 +255,7 @@ function RC_Analyze()
 	
 	-- delete all outdated items from buffer
 	for i = #ring_delete,1,-1 do
-		table.remove(rc_ring, i)
+		table.remove(rc_ring, ring_delete[i])
 	end
 	
 	fps_avg = fps_sum / current_records
@@ -309,7 +329,7 @@ function RC_Analyze()
 end
 
 function RC_Draw()
-	if rc_notify_level < 1 then
+	if rc_notify_level < 1 or not rc_notification_activated then
 		return
 	end
 
@@ -320,6 +340,46 @@ function RC_Draw()
 	
 	draw_string(RC_NOTIFICATION_X, RC_NOTIFICATION_Y, rc_notification_text, color)
 end
+
+function RC_OpenWindow()
+	if rc_window then
+		return
+	end
+	
+	rc_window = float_wnd_create(800, 450, 1, true)
+	float_wnd_set_title(rc_window, "Reality Check")
+	float_wnd_set_imgui_builder(rc_window, "RC_BuildWindow")
+	float_wnd_set_onclose(rc_window, "RC_OnCloseWindow")
+end
+
+function RC_BuildWindow(wnd, x, y)
+	imgui.TextUnformatted("Test")
+end
+
+function RC_OnCloseWindow(wnd)
+	rc_window = nil
+end
+
+function RC_EnableNotifications()
+	rc_notification_activated = true
+end
+
+function RC_DisableNotifications()
+	rc_notification_activated = false
+end
+
+
+
+
+rc_macro_default_state_notifications = "activate"
+if not rc_notification_activated then
+	rc_macro_default_state_notifications = "deactivate"
+end
+
+add_macro("Show Reality Check analysis", "RC_OpenWindow()")
+add_macro("Enable Reality Check notifications", "RC_EnableNotifications()", "RC_DisableNotifications()", rc_macro_default_state_notifications)
+
+RC_OpenWindow() -- DEBUG
 
 do_every_draw("RC_Draw()")
 do_every_frame("RC_Record()")
