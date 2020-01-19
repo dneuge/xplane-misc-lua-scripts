@@ -41,6 +41,7 @@ RC_ANALYZE_INTERVAL                             = 3    -- analyze at most once e
 -- Thresholds to trigger warnings for
 -- - frames per second
 RC_ANALYZE_FPS_THRESHOLD                        = 20.0 -- count number of records below this threshold of FPS
+RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL         = 5    -- number of triggering records in analyzed time window to interpret as critical
 
 -- - ground speed factor (approximate externally observed time dilation factor)
 RC_ANALYZE_GS_FACTOR_THRESHOLD1                 = 0.95 -- "warning" level
@@ -49,6 +50,17 @@ RC_ANALYZE_GS_FACTOR_THRESHOLD2                 = 0.85 -- "critical" level
 -- - cumulative error in distance (externally observed cumulative time dilation position error)
 RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 = 0.75 -- "warning" level in nautical miles
 RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 = 1.50 -- "critical" level in nautical miles
+
+-- How many FPS/GS warnings (including critical level) are needed to start notifying user?
+-- Warnings resulting from distance errors are always shown.
+RC_NOTIFICATION_THRESHOLD = 2
+
+-- Where should the notification be printed? (Y coordinate starts at bottom!)
+RC_NOTIFICATION_X = 10
+RC_NOTIFICATION_Y = 800
+
+-- Print all details to developer console? (users usually don't need this)
+RC_DEBUG = false
 
 --- CONFIG END
 
@@ -60,9 +72,11 @@ RC_FACTOR_METERS_PER_SECOND_TO_KNOTS = 3600.0 / METERS_PER_NAUTICAL_MILE
 DataRef("RC_GROUND_SPEED", "sim/flightmodel/position/groundspeed", "readonly")
 DataRef("RC_PAUSED", "sim/time/paused", "readonly")
 
-rc_records={}
-rc_ring={}
-rc_last_analyze=0.0
+rc_records = {}
+rc_ring = {}
+rc_last_analyze = 0.0
+rc_notify_level = 0
+rc_notification_text = ""
 
 function greatCircleDistanceInMetersByHaversine(latitude1, longitude1, latitude2, longitude2)
 	latitude1Radians = math.rad(latitude1)
@@ -143,6 +157,9 @@ function RC_Analyze()
 		return
 	end
 	rc_last_analyze = now
+	
+	rc_notify_level = 0
+	rc_notification_text = ""
 	
 	oldest_record = nil
 	current_records = 0
@@ -234,20 +251,75 @@ function RC_Analyze()
 	
 	oldest_record_age = now - oldest_record[1]
 	
-	print(string.format("analyzed data for last %.1f seconds", oldest_record_age))
-	print(string.format("FPS min %.1f / avg %.1f / max %.1f, WARN: %d", fps_min, fps_avg, fps_max, fps_below_threshold))
-	print(string.format("GSx min %.2f / avg %.2f / max %.2f, WARN: %d, CRIT: %d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_below_threshold1, gs_factor_below_threshold2))
-	print(string.format("cumulative distance indicated %.2f nm / externally perceived %.2f nm / error %.2f nm", distance_indicated, distance_externally_perceived, distance_error))
-	
+	distance_error_level = 0
 	if distance_error >= RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 then
-		print("cumulative distance error is CRITICAL")
+		distance_error_level = 2
 	elseif distance_error >= RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 then
-		print("cumulative distance error exceeds WARNING threshold")
+		distance_error_level = 1
+	end
+	
+	if RC_DEBUG then
+		print(string.format("analyzed data for last %.1f seconds", oldest_record_age))
+		print(string.format("FPS min %.1f / avg %.1f / max %.1f, WARN: %d", fps_min, fps_avg, fps_max, fps_below_threshold))
+		print(string.format("GSx min %.2f / avg %.2f / max %.2f, WARN: %d, CRIT: %d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_below_threshold1, gs_factor_below_threshold2))
+		print(string.format("cumulative distance indicated %.2f nm / externally perceived %.2f nm / error %.2f nm / warn level %d", distance_indicated, distance_externally_perceived, distance_error, distance_error_level))
+	end
+	
+	fps_warning = fps_below_threshold >= RC_NOTIFICATION_THRESHOLD
+	fps_critical = fps_below_threshold >= RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL
+	
+	gsx_warning = gs_factor_below_threshold1 >= RC_NOTIFICATION_THRESHOLD
+	gsx_critical = (gs_factor_below_threshold1 + gs_factor_below_threshold2) >= RC_NOTIFICATION_THRESHOLD
+	
+	if fps_critical or gsx_critical or distance_error_level > 1 then
+		rc_notify_level = 2
+	elseif fps_warning or gsx_warning or distance_error_level > 0 then
+		rc_notify_level = 1
 	else
-		print("cumulative distance error is OK")
+		return
+	end
+	
+	rc_notification_text = "Time dilation:"
+	has_preceding_text = false
+	
+	if distance_error_level > 0 then
+		rc_notification_text = rc_notification_text .. string.format(" %.2f nm off expected position", distance_error)
+		has_preceding_text = true
+	end
+	
+	if gsx_warning or gsx_critical then
+		if has_preceding_text then
+			rc_notification_text = rc_notification_text .. " /"
+		end
+	
+		rc_notification_text = rc_notification_text .. string.format(" GSx %.2f/%.2f/%.2f W%d C%d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_below_threshold1, gs_factor_below_threshold2)
+		has_preceding_text = true
+	end
+	
+	if fps_warning or fps_critical then
+		if has_preceding_text then
+			rc_notification_text = rc_notification_text .. " /"
+		end
+	
+		rc_notification_text = rc_notification_text .. string.format(" FPS %.1f/%.1f/%.1f W%d", fps_min, fps_avg, fps_max, fps_below_threshold)
+		has_preceding_text = true
 	end
 end
 
+function RC_Draw()
+	if rc_notify_level < 1 then
+		return
+	end
+
+	color = "yellow"
+	if rc_notify_level > 1 and os.clock() % 2 < 1.0 then
+		color = "red"
+	end
+	
+	draw_string(RC_NOTIFICATION_X, RC_NOTIFICATION_Y, rc_notification_text, color)
+end
+
+do_every_draw("RC_Draw()")
 do_every_frame("RC_Record()")
 do_often("RC_Count()")
 do_often("RC_Analyze()")
