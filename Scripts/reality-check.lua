@@ -81,6 +81,8 @@ rc_notify_level = 0
 rc_notification_text = ""
 rc_notification_activated = true
 
+current_records = 0
+
 fps_min = 99999.99
 fps_avg = nil
 fps_max = 0.0
@@ -346,14 +348,43 @@ function RC_OpenWindow()
 		return
 	end
 	
-	rc_window = float_wnd_create(800, 450, 1, true)
+	rc_window = float_wnd_create(420, 260, 1, true)
 	float_wnd_set_title(rc_window, "Reality Check")
 	float_wnd_set_imgui_builder(rc_window, "RC_BuildWindow")
 	float_wnd_set_onclose(rc_window, "RC_OnCloseWindow")
 end
 
 function RC_BuildWindow(wnd, x, y)
-	imgui.TextUnformatted("Test")
+	has_data = fps_avg ~= nil and fps_min < 99999 and gs_factor_avg ~= nil and gs_factor_min < 99999
+	
+	if not has_data then
+		imgui.TextUnformatted(string.format("No data. Start moving faster than %.0f knots indicated GS.", RC_MINIMUM_INDICATED_GROUND_SPEED))
+		return
+	end
+
+	imgui.TextUnformatted("                min    avg    max")
+	imgui.TextUnformatted(string.format("FPS          %6.2f %6.2f %6.2f", fps_min, fps_avg, fps_max))
+	imgui.TextUnformatted(string.format("GS factor    %6.2f %6.2f %6.2f", gs_factor_min, gs_factor_avg, gs_factor_max))
+	
+	imgui.TextUnformatted("")
+	imgui.TextUnformatted(string.format("cum distance %6.2f nm indicated", distance_indicated))
+	imgui.TextUnformatted(string.format("             %6.2f nm externally perceived", distance_externally_perceived))
+	imgui.TextUnformatted(string.format("             %6.2f nm off expectation", distance_error))
+	
+	imgui.TextUnformatted("")
+	imgui.TextUnformatted(string.format("%3d records analyzed", current_records))
+	imgui.TextUnformatted(string.format("%3d records below FPS warning threshold", fps_below_threshold))
+	imgui.TextUnformatted(string.format("%3d records below GS factor warning threshold", gs_factor_single_below_threshold1))
+	imgui.TextUnformatted(string.format("%3d records below GS factor critical threshold", gs_factor_single_below_threshold2))
+	
+	imgui.TextUnformatted("")
+	if distance_error_level == 0 then
+		imgui.TextUnformatted("Cumulative distance is within expected range.")
+	elseif distance_error_level == 1 then
+		imgui.TextUnformatted("Cumulative distance is slightly below external perception.")
+	else 
+		imgui.TextUnformatted("Cumulative distance is severely below external perception.")
+	end
 end
 
 function RC_OnCloseWindow(wnd)
@@ -378,8 +409,6 @@ end
 
 add_macro("Show Reality Check analysis", "RC_OpenWindow()")
 add_macro("Enable Reality Check notifications", "RC_EnableNotifications()", "RC_DisableNotifications()", rc_macro_default_state_notifications)
-
-RC_OpenWindow() -- DEBUG
 
 do_every_draw("RC_Draw()")
 do_every_frame("RC_Record()")
