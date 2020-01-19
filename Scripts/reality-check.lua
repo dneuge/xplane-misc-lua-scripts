@@ -171,6 +171,7 @@ function RC_Analyze()
 		fps = record[3]
 		gs_slowest_indicated = record[4]
 		gs_externally_perceived = record[5]
+		gs_factor = record[6]
 		
 		age = now - record_time
 		if age >= RC_ANALYZE_MAX_AGE_SECONDS then
@@ -194,7 +195,6 @@ function RC_Analyze()
 				fps_below_threshold = fps_below_threshold + 1
 			end
 			
-			gs_factor = record[6]
 			if gs_factor < gs_factor_min then
 				gs_factor_min = gs_factor
 			end
@@ -202,6 +202,7 @@ function RC_Analyze()
 				gs_factor_max = gs_factor
 			end
 			gs_factor_sum = gs_factor_sum + gs_factor
+			
 			if gs_factor <= RC_ANALYZE_GS_FACTOR_THRESHOLD2 then
 				gs_factor_below_threshold2 = gs_factor_below_threshold2 + 1
 			elseif gs_factor <= RC_ANALYZE_GS_FACTOR_THRESHOLD1 then
@@ -235,7 +236,7 @@ function RC_Analyze()
 	
 	print(string.format("analyzed data for last %.1f seconds", oldest_record_age))
 	print(string.format("FPS min %.1f / avg %.1f / max %.1f, WARN: %d", fps_min, fps_avg, fps_max, fps_below_threshold))
-	print(string.format("GSx min %.1f / avg %.1f / max %.1f, WARN: %d, CRIT: %d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_below_threshold1, gs_factor_below_threshold2))
+	print(string.format("GSx min %.2f / avg %.2f / max %.2f, WARN: %d, CRIT: %d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_below_threshold1, gs_factor_below_threshold2))
 	print(string.format("cumulative distance indicated %.2f nm / externally perceived %.2f nm / error %.2f nm", distance_indicated, distance_externally_perceived, distance_error))
 	
 	if distance_error >= RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 then
