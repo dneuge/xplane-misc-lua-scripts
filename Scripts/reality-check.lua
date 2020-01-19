@@ -31,22 +31,22 @@
 
 --- CONFIG START
 
-RC_MINIMUM_INDICATED_GROUND_SPEED = 10.0 -- minimum indicated GS at which we should start recording
+RC_MINIMUM_INDICATED_GROUND_SPEED               = 10.0 -- minimum indicated GS at which we should start recording
 
-RC_ANALYZE_MAX_AGE_SECONDS = 30.0 -- age of oldest record to analyze
-RC_ANALYZE_INTERVAL = 3 -- analyze at most once every x seconds
-RC_ANALYZE_FPS_THRESHOLD = 20.0 -- count number of records below this threshold of FPS
-RC_ANALYZE_GS_FACTOR_THRESHOLD1 = 0.95 -- "warning" level of ground speed slow-down factor
-RC_ANALYZE_GS_FACTOR_THRESHOLD2 = 0.85 -- "critical" level of ground speed slow-down factor
+RC_ANALYZE_MAX_AGE_SECONDS                      = 30.0 -- age of oldest record to analyze
+RC_ANALYZE_INTERVAL                             = 3    -- analyze at most once every x seconds
+RC_ANALYZE_FPS_THRESHOLD                        = 20.0 -- count number of records below this threshold of FPS
+RC_ANALYZE_GS_FACTOR_THRESHOLD1                 = 0.95 -- "warning" level of ground speed slow-down factor
+RC_ANALYZE_GS_FACTOR_THRESHOLD2                 = 0.85 -- "critical" level of ground speed slow-down factor
 RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 = 0.75 -- "warning" level of cumulative error of distance over time in nautical miles
 RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 = 1.50 -- "critical" level of cumulative error of distance over time in nautical miles
+
+--- CONFIG END
+
 
 MEAN_RADIUS_EARTH_METERS = 6371009
 METERS_PER_NAUTICAL_MILE = 1852
 RC_FACTOR_METERS_PER_SECOND_TO_KNOTS = 3600.0 / METERS_PER_NAUTICAL_MILE
-
---- CONFIG END
-
 
 DataRef("RC_GROUND_SPEED", "sim/flightmodel/position/groundspeed", "readonly")
 DataRef("RC_PAUSED", "sim/time/paused", "readonly")
@@ -110,6 +110,7 @@ function RC_Count()
 	externally_perceived_ground_speed = great_circle_distance / diff_time * 3600
 	ground_speed_factor = externally_perceived_ground_speed / slowest_indicated_ground_speed
 	
+	-- limit GS factor to range [0..1]
 	if ground_speed_factor > 1.0 then
 		ground_speed_factor = 1.0
 	elseif ground_speed_factor < 0.0 then
@@ -164,6 +165,7 @@ function RC_Analyze()
 		
 		age = now - record_time
 		if age >= RC_ANALYZE_MAX_AGE_SECONDS then
+			-- record is too old, ignore and remember to delete it
 			table.insert(ring_delete, i)
 		else
 			if not oldest_record then
@@ -203,6 +205,7 @@ function RC_Analyze()
 		end
 	end
 	
+	-- delete all outdated items from buffer
 	for i = #ring_delete,1,-1 do
 		table.remove(rc_ring, i)
 	end
@@ -216,13 +219,13 @@ function RC_Analyze()
 	end
 	
 	if not oldest_record then
-		print("no data")
+		--print("no data")
 		return
 	end
 	
 	oldest_record_age = now - oldest_record[1]
 	
-	print(string.format("have data for last %.1f seconds", oldest_record_age))
+	print(string.format("analyzed data for last %.1f seconds", oldest_record_age))
 	print(string.format("FPS min %.1f / avg %.1f / max %.1f, WARN: %d", fps_min, fps_avg, fps_max, fps_below_threshold))
 	print(string.format("GSx min %.1f / avg %.1f / max %.1f, WARN: %d, CRIT: %d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_below_threshold1, gs_factor_below_threshold2))
 	print(string.format("cumulative distance indicated %.2f nm / externally perceived %.2f nm / error %.2f nm", distance_indicated, distance_externally_perceived, distance_error))
