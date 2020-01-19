@@ -471,8 +471,6 @@ end
 add_macro("Show Reality Check analysis", "RC_OpenWindow()")
 add_macro("Enable Reality Check notifications", "RC_EnableNotifications()", "RC_DisableNotifications()", rc_macro_default_state_notifications)
 
-RC_OpenWindow() -- DEBUG
-
 do_every_draw("RC_Draw()")
 do_every_frame("RC_Record()")
 do_often("RC_Count()")
