@@ -31,15 +31,24 @@
 
 --- CONFIG START
 
+-- What should be recorded?
 RC_MINIMUM_INDICATED_GROUND_SPEED               = 10.0 -- minimum indicated GS at which we should start recording
 
+-- When and what should be analyzed?
 RC_ANALYZE_MAX_AGE_SECONDS                      = 30.0 -- age of oldest record to analyze
 RC_ANALYZE_INTERVAL                             = 3    -- analyze at most once every x seconds
+
+-- Thresholds to trigger warnings for
+-- - frames per second
 RC_ANALYZE_FPS_THRESHOLD                        = 20.0 -- count number of records below this threshold of FPS
-RC_ANALYZE_GS_FACTOR_THRESHOLD1                 = 0.95 -- "warning" level of ground speed slow-down factor
-RC_ANALYZE_GS_FACTOR_THRESHOLD2                 = 0.85 -- "critical" level of ground speed slow-down factor
-RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 = 0.75 -- "warning" level of cumulative error of distance over time in nautical miles
-RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 = 1.50 -- "critical" level of cumulative error of distance over time in nautical miles
+
+-- - ground speed factor (approximate externally observed time dilation factor)
+RC_ANALYZE_GS_FACTOR_THRESHOLD1                 = 0.95 -- "warning" level
+RC_ANALYZE_GS_FACTOR_THRESHOLD2                 = 0.85 -- "critical" level
+
+-- - cumulative error in distance (externally observed cumulative time dilation position error)
+RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 = 0.75 -- "warning" level in nautical miles
+RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 = 1.50 -- "critical" level in nautical miles
 
 --- CONFIG END
 
@@ -193,11 +202,10 @@ function RC_Analyze()
 				gs_factor_max = gs_factor
 			end
 			gs_factor_sum = gs_factor_sum + gs_factor
-			if gs_factor < RC_ANALYZE_GS_FACTOR_THRESHOLD1 then
-				gs_factor_below_threshold1 = gs_factor_below_threshold1 + 1
-			end
-			if gs_factor < RC_ANALYZE_GS_FACTOR_THRESHOLD2 then
+			if gs_factor <= RC_ANALYZE_GS_FACTOR_THRESHOLD2 then
 				gs_factor_below_threshold2 = gs_factor_below_threshold2 + 1
+			elseif gs_factor <= RC_ANALYZE_GS_FACTOR_THRESHOLD1 then
+				gs_factor_below_threshold1 = gs_factor_below_threshold1 + 1
 			end
 			
 			distance_indicated = distance_indicated + (gs_slowest_indicated * diff_time / 3600)
