@@ -373,17 +373,60 @@ function RC_BuildWindow(wnd, x, y)
 	
 	imgui.TextUnformatted("")
 	imgui.TextUnformatted(string.format("%3d records analyzed", current_records))
-	imgui.TextUnformatted(string.format("%3d records below FPS warning threshold", fps_below_threshold))
-	imgui.TextUnformatted(string.format("%3d records below GS factor warning threshold", gs_factor_single_below_threshold1))
-	imgui.TextUnformatted(string.format("%3d records below GS factor critical threshold", gs_factor_single_below_threshold2))
 	
+	yellow = 0xFF00FFFF
+	red = 0xFF0000FF
+	color = nil
+	
+	if fps_below_threshold > RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL then
+		color = red
+	elseif fps_below_threshold > 0 then
+		color = yellow
+	end
+	if color then
+		imgui.PushStyleColor(imgui.constant.Col.Text, color)
+	end
+	imgui.TextUnformatted(string.format("%3d records below FPS warning threshold", fps_below_threshold))
+	if color then
+		imgui.PopStyleColor()
+		color = nil
+	end
+	
+	if gs_factor_single_below_threshold1 > 0 then
+		color = yellow
+	end
+	if color then
+		imgui.PushStyleColor(imgui.constant.Col.Text, color)
+	end
+	imgui.TextUnformatted(string.format("%3d records below GS factor warning threshold", gs_factor_single_below_threshold1))
+	if color then
+		imgui.PopStyleColor()
+		color = nil
+	end
+	
+	if gs_factor_single_below_threshold2 > 0 then
+		color = red
+	end
+	if color then
+		imgui.PushStyleColor(imgui.constant.Col.Text, color)
+	end
+	imgui.TextUnformatted(string.format("%3d records below GS factor critical threshold", gs_factor_single_below_threshold2))
+	if color then
+		imgui.PopStyleColor()
+		color = nil
+	end
+
 	imgui.TextUnformatted("")
 	if distance_error_level == 0 then
 		imgui.TextUnformatted("Cumulative distance is within expected range.")
 	elseif distance_error_level == 1 then
+		imgui.PushStyleColor(imgui.constant.Col.Text, yelloq)
 		imgui.TextUnformatted("Cumulative distance is slightly below external perception.")
+		imgui.PopStyleColor()
 	else 
+		imgui.PushStyleColor(imgui.constant.Col.Text, red)
 		imgui.TextUnformatted("Cumulative distance is severely below external perception.")
+		imgui.PopStyleColor()
 	end
 end
 
@@ -409,6 +452,8 @@ end
 
 add_macro("Show Reality Check analysis", "RC_OpenWindow()")
 add_macro("Enable Reality Check notifications", "RC_EnableNotifications()", "RC_DisableNotifications()", rc_macro_default_state_notifications)
+
+RC_OpenWindow() -- DEBUG
 
 do_every_draw("RC_Draw()")
 do_every_frame("RC_Record()")
