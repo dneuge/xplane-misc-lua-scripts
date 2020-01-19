@@ -19,7 +19,7 @@ are unable to maintain real-time simulation rates.
 
 The goal of this script is to experiment with some ways of detecting time dilation in X-Plane to possibly improve those detections in order to lower the number of false positives (disconnects when they were actually not required).
 
-The issue of time dilation has been around for a long time but only lately and solutions such as (3jFPS-wizard)[https://forums.x-plane.org/index.php?/files/file/43281-3jfps-wizard11/] or AutoLOD are available to maintain a steady framerate.
+The issue of time dilation has been around for a long time but only lately and solutions such as [3jFPS-wizard](https://forums.x-plane.org/index.php?/files/file/43281-3jfps-wizard11/) or AutoLOD are available to maintain a steady framerate.
 
 #### Usage
 
