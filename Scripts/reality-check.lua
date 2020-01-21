@@ -70,7 +70,7 @@ RC_DEBUG = false
 
 --- CONFIG END
 
-RC_VERSION = "0.2dev"
+RC_VERSION = "0.2"
 
 RC_TIME_DILATION_FRAME_RATE = 19 -- FPS (floored, inverse frame time) when X-Plane starts time dilation
 
