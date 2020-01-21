@@ -564,7 +564,7 @@ function RC_BuildWindow(wnd, x, y)
 	if distance_error_level == 0 then
 		imgui.TextUnformatted("Cumulative distance is within expected range.")
 	elseif distance_error_level == 1 then
-		imgui.PushStyleColor(imgui.constant.Col.Text, yelloq)
+		imgui.PushStyleColor(imgui.constant.Col.Text, yellow)
 		imgui.TextUnformatted("Cumulative distance is slightly below external perception.")
 		imgui.PopStyleColor()
 	else 
