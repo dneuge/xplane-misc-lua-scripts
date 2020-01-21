@@ -54,8 +54,8 @@ RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD1          = 0.80 -- "warning" level of a s
 RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD2          = 0.70 -- "critical" level of a single record
 
 -- - cumulative error in distance (externally observed cumulative time dilation position error)
-RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 = 0.75 -- "warning" level in nautical miles
-RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 = 1.50 -- "critical" level in nautical miles
+RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 = 0.30 -- "warning" level in nautical miles
+RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 = 0.75 -- "critical" level in nautical miles
 
 -- How many FPS/GS warnings (including critical level) are needed to start notifying user?
 -- Warnings resulting from distance errors and average values are always shown.
