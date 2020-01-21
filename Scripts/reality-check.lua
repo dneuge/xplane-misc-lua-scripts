@@ -39,7 +39,7 @@ RC_ANALYZE_MAX_AGE_SECONDS                      = 30.0 -- age of oldest record t
 RC_ANALYZE_INTERVAL                             = 3    -- analyze at most once every x seconds
 
 -- Thresholds to trigger warnings for
--- - frames per second
+-- - frames per second (counted average over 1 second windows)
 RC_ANALYZE_FPS_THRESHOLD                        = 20.0 -- count number of records below this threshold of FPS
 RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL         = 5    -- number of triggering records in analyzed time window to interpret as critical
 
@@ -66,6 +66,7 @@ RC_DEBUG = false
 
 --- CONFIG END
 
+RC_VERSION = "0.2dev"
 
 MEAN_RADIUS_EARTH_METERS = 6371009
 METERS_PER_NAUTICAL_MILE = 1852
@@ -284,8 +285,8 @@ function RC_Analyze()
 	
 	if RC_DEBUG then
 		print(string.format("analyzed data for last %.1f seconds", oldest_record_age))
-		print(string.format("FPS min %.1f / avg %.1f / max %.1f, WARN: %d", fps_min, fps_avg, fps_max, fps_below_threshold))
-		print(string.format("GSx min %.2f / avg %.2f / max %.2f, WARN: %d, CRIT: %d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_single_below_threshold1, gs_factor_single_below_threshold2))
+		print(string.format("#f/1 min %.1f / avg %.1f / max %.1f, WARN: %d", fps_min, fps_avg, fps_max, fps_below_threshold))
+		print(string.format("GSx  min %.2f / avg %.2f / max %.2f, WARN: %d, CRIT: %d", gs_factor_min, gs_factor_avg, gs_factor_max, gs_factor_single_below_threshold1, gs_factor_single_below_threshold2))
 		print(string.format("cumulative distance indicated %.2f nm / externally perceived %.2f nm / error %.2f nm / warn level %d", distance_indicated, distance_externally_perceived, distance_error, distance_error_level))
 	end
 	
@@ -325,7 +326,7 @@ function RC_Analyze()
 			rc_notification_text = rc_notification_text .. " /"
 		end
 	
-		rc_notification_text = rc_notification_text .. string.format(" FPS %.1f/%.1f/%.1f W%d", fps_min, fps_avg, fps_max, fps_below_threshold)
+		rc_notification_text = rc_notification_text .. string.format(" #f/s %.1f/%.1f/%.1f W%d", fps_min, fps_avg, fps_max, fps_below_threshold)
 		has_preceding_text = true
 	end
 end
@@ -349,7 +350,7 @@ function RC_OpenWindow()
 	end
 	
 	rc_window = float_wnd_create(420, 280, 1, true)
-	float_wnd_set_title(rc_window, "Reality Check")
+	float_wnd_set_title(rc_window, "Reality Check v" .. RC_VERSION)
 	float_wnd_set_imgui_builder(rc_window, "RC_BuildWindow")
 	float_wnd_set_onclose(rc_window, "RC_OnCloseWindow")
 end
@@ -358,16 +359,16 @@ function RC_BuildWindow(wnd, x, y)
 	has_data = fps_avg ~= nil and fps_min < 99999 and gs_factor_avg ~= nil and gs_factor_min < 99999
 	
 	if not has_data then
-		imgui.TextUnformatted(string.format("No data. Start moving faster than %.0f knots indicated GS.", RC_MINIMUM_INDICATED_GROUND_SPEED))
+		imgui.TextUnformatted(string.format("No data. Start moving faster than %.0f knots \nindicated GS.", RC_MINIMUM_INDICATED_GROUND_SPEED))
 		return
 	end
 
 	imgui.TextUnformatted("                min    avg    max")
-	imgui.TextUnformatted(string.format("FPS          %6.2f %6.2f %6.2f", fps_min, fps_avg, fps_max))
+	imgui.TextUnformatted(string.format("#frames/1sec %6.2f %6.2f %6.2f", fps_min, fps_avg, fps_max))
 	imgui.TextUnformatted(string.format("GS factor    %6.2f %6.2f %6.2f", gs_factor_min, gs_factor_avg, gs_factor_max))
 	
 	imgui.TextUnformatted("")
-	imgui.TextUnformatted(string.format("cum distance %6.2f nm indicated", distance_indicated))
+	imgui.TextUnformatted(string.format("cum distance %6.2f nm expected by indication", distance_indicated))
 	imgui.TextUnformatted(string.format("             %6.2f nm externally perceived", distance_externally_perceived))
 	imgui.TextUnformatted(string.format("             %6.2f nm off expectation", distance_error))
 	
@@ -386,7 +387,7 @@ function RC_BuildWindow(wnd, x, y)
 	if color then
 		imgui.PushStyleColor(imgui.constant.Col.Text, color)
 	end
-	imgui.TextUnformatted(string.format("%3d records below FPS warning threshold", fps_below_threshold))
+	imgui.TextUnformatted(string.format("%3d records below #frames/1sec warning threshold", fps_below_threshold))
 	if color then
 		imgui.PopStyleColor()
 		color = nil
@@ -471,9 +472,11 @@ end
 add_macro("Show Reality Check analysis", "RC_OpenWindow()")
 add_macro("Enable Reality Check notifications", "RC_EnableNotifications()", "RC_DisableNotifications()", rc_macro_default_state_notifications)
 
+RC_OpenWindow()
+
 do_every_draw("RC_Draw()")
 do_every_frame("RC_Record()")
 do_often("RC_Count()")
 do_often("RC_Analyze()")
 
-print("Loaded Reality Check LUA script")
+print("Loaded Reality Check LUA script version " .. RC_VERSION)
