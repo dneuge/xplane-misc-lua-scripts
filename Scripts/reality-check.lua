@@ -43,6 +43,10 @@ RC_ANALYZE_INTERVAL                             = 3    -- analyze at most once e
 RC_ANALYZE_FPS_THRESHOLD                        = 20.0 -- count number of records below this threshold of FPS
 RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL         = 5    -- number of triggering records in analyzed time window to interpret as critical
 
+-- - time dilation (assumed to activate at inverse frame time <= RC_TIME_DILATION_FRAME_RATE)
+RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1 =  2.0 -- "warning" level for real time spent with time dilation (seconds)
+RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2 = 10.0 -- "critical" level for real time spent with time dilation (seconds)
+
 -- - ground speed factor (approximate externally observed time dilation factor)
 RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1         = 0.95 -- "warning" level for average of all records
 RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2         = 0.85 -- "critical" level for average of all records
@@ -341,7 +345,7 @@ function RC_Analyze()
 	inv_frame_time_sum = 0.0
 	inv_frame_time_total = 0
 	for inv_frame_time,arr in pairs(aggregated_frame_times_by_inv) do
-		if inv_frame_time <= RC_TIME_DILATION_FRAME_RATE + 0.01 then
+		if inv_frame_time <= RC_TIME_DILATION_FRAME_RATE then
 			rc_time_spent_in_time_dilation = rc_time_spent_in_time_dilation + arr[2]
 		end
 		
@@ -372,9 +376,12 @@ function RC_Analyze()
 	gsx_warning = gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or gs_factor_single_below_threshold1 >= RC_NOTIFICATION_THRESHOLD
 	gsx_critical = gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or(gs_factor_single_below_threshold1 + gs_factor_single_below_threshold2) >= RC_NOTIFICATION_THRESHOLD
 	
-	if fps_critical or gsx_critical or distance_error_level > 1 then
+	dilation_time_spent_warning = rc_time_spent_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1
+	dilation_time_spent_critical = rc_time_spent_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2
+	
+	if fps_critical or gsx_critical or distance_error_level > 1 or dilation_time_spent_critical then
 		rc_notify_level = 2
-	elseif fps_warning or gsx_warning or distance_error_level > 0 then
+	elseif fps_warning or gsx_warning or distance_error_level > 0 or dilation_time_spent_warning then
 		rc_notify_level = 1
 	else
 		return
@@ -382,6 +389,11 @@ function RC_Analyze()
 	
 	rc_notification_text = "Time dilation:"
 	has_preceding_text = false
+	
+	if dilation_time_spent_warning or dilation_time_spent_critical then
+		rc_notification_text = rc_notification_text .. string.format(" active for %.1f seconds (%.1f%%)", rc_time_spent_in_time_dilation, rc_time_spent_in_time_dilation_percentage)
+		has_preceding_text = true
+	end
 	
 	if distance_error_level > 0 then
 		rc_notification_text = rc_notification_text .. string.format(" %.2f nm off expected position", distance_error)
@@ -459,13 +471,29 @@ function RC_BuildWindow(wnd, x, y)
 	
 	local width = imgui.GetWindowWidth()
 
+	yellow = 0xFF00FFFF
+	red = 0xFF0000FF
+	color = nil
+	
 	imgui.TextUnformatted("                min    avg    max")
 	imgui.TextUnformatted(string.format("1/frametime  %6.2f %6.2f %6.2f", rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max))
 	imgui.TextUnformatted(string.format("#frames/1sec %6.2f %6.2f %6.2f", fps_min, fps_avg, fps_max))
 	imgui.TextUnformatted(string.format("GS factor    %6.2f %6.2f %6.2f", gs_factor_min, gs_factor_avg, gs_factor_max))
 	
 	imgui.TextUnformatted("")
+	if rc_time_spent_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2 then
+		color = red
+	elseif rc_time_spent_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1 then
+		color = yellow
+	end
+	if color then
+		imgui.PushStyleColor(imgui.constant.Col.Text, color)
+	end
 	imgui.TextUnformatted(string.format("%5.2f seconds spent with time dilation (%.1f%%)", rc_time_spent_in_time_dilation, rc_time_spent_in_time_dilation_percentage))
+	if color then
+		imgui.PopStyleColor()
+		color = nil
+	end
 	
 	imgui.TextUnformatted("")
 	imgui.TextUnformatted(string.format("cum distance %6.2f nm expected by indication", distance_indicated))
@@ -474,10 +502,6 @@ function RC_BuildWindow(wnd, x, y)
 	
 	imgui.TextUnformatted("")
 	imgui.TextUnformatted(string.format("%3d records analyzed covering %4.1f seconds", current_records, rc_observed_time))
-	
-	yellow = 0xFF00FFFF
-	red = 0xFF0000FF
-	color = nil
 	
 	if fps_below_threshold > RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL then
 		color = red
