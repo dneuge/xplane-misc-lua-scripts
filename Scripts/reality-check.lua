@@ -197,7 +197,7 @@ function RC_Count()
 	
 	fps = num_records / diff_time
 	
-	table.insert(rc_ring, {os.clock(), diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, frame_times_by_inv})
+	table.insert(rc_ring, {os.clock(), diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, frame_times_by_inv, great_circle_distance})
 	
 	--print(string.format("%.2f %.1f %.5f %.2f %.2f %.2f", diff_time, fps, great_circle_distance, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor))
 end
@@ -255,6 +255,7 @@ function RC_Analyze()
 		gs_externally_perceived = record[5]
 		gs_factor = record[6]
 		frame_times_by_inv = record[7]
+		great_circle_distance = record[8]
 		
 		age = now - record_time
 		if age >= RC_ANALYZE_MAX_AGE_SECONDS then
@@ -293,7 +294,7 @@ function RC_Analyze()
 			end
 			
 			distance_indicated = distance_indicated + (gs_slowest_indicated * diff_time / 3600)
-			distance_externally_perceived = distance_externally_perceived + (gs_externally_perceived * diff_time / 3600)
+			distance_externally_perceived = distance_externally_perceived + great_circle_distance
 			
 			for inv_frame_time, arr in pairs(frame_times_by_inv) do
 				num_frames = arr[1]
