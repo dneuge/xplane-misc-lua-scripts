@@ -39,7 +39,7 @@ RC_ANALYZE_MAX_AGE_SECONDS                      = 30.0 -- age of oldest record t
 RC_ANALYZE_INTERVAL                             = 3    -- analyze at most once every x seconds
 
 -- Thresholds to trigger warnings for
--- - frames per second (counted average over 1 second windows)
+-- - frames per second (based on averaged count over 1 second windows)
 RC_ANALYZE_FPS_THRESHOLD                        = 20.0 -- count number of records below this threshold of FPS
 RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL         = 5    -- number of triggering records in analyzed time window to interpret as critical
 
@@ -68,12 +68,15 @@ RC_DEBUG = false
 
 RC_VERSION = "0.2dev"
 
+RC_TIME_DILATION_FRAME_RATE = 19 -- FPS (floored, inverse frame time) when X-Plane starts time dilation
+
 MEAN_RADIUS_EARTH_METERS = 6371009
 METERS_PER_NAUTICAL_MILE = 1852
 RC_FACTOR_METERS_PER_SECOND_TO_KNOTS = 3600.0 / METERS_PER_NAUTICAL_MILE
 
 DataRef("RC_GROUND_SPEED", "sim/flightmodel/position/groundspeed", "readonly")
 DataRef("RC_PAUSED", "sim/time/paused", "readonly")
+DataRef("RC_FRAME_TIME", "sim/operation/misc/frame_rate_period", "readonly")
 
 rc_records = {}
 rc_ring = {}
@@ -87,8 +90,11 @@ current_records = 0
 fps_min = 99999.99
 fps_avg = nil
 fps_max = 0.0
-fps_sum = 0.0
 fps_below_threshold = 0
+
+rc_inv_frame_time_min = 99999.99
+rc_inv_frame_time_avg = nil
+rc_inv_frame_time_max = 0.0
 
 gs_factor_min = 99999.99
 gs_factor_avg = nil
@@ -102,6 +108,13 @@ distance_externally_perceived = 0.0
 distance_error = nil
 
 rc_window = nil
+
+rc_hist_inv_frame_times_count = {}
+rc_hist_inv_frame_times_time_spent = {}
+rc_time_spent_in_time_dilation = 0.0
+rc_time_spent_in_time_dilation_percentage = 0.0
+
+rc_observed_time = 0.0
 
 function greatCircleDistanceInMetersByHaversine(latitude1, longitude1, latitude2, longitude2)
 	latitude1Radians = math.rad(latitude1)
@@ -129,6 +142,7 @@ function RC_Count()
 	first_record = nil
 	last_record = nil
 	num_records = #rc_records
+	frame_times_by_inv = {}
 	
 	for i,record in ipairs(rc_records) do
 		ground_speed_meters_per_second = record[4]
@@ -141,6 +155,18 @@ function RC_Count()
 		
 		if ground_speed_meters_per_second < slowest_indicated_ground_speed_meters_per_second then
 			slowest_indicated_ground_speed_meters_per_second = ground_speed_meters_per_second
+		end
+		
+		frame_time = record[5]
+		if frame_time > 0.0 then
+			inv_frame_time = math.floor(1.0 / frame_time)
+			if inv_frame_time > 0 then
+				previous = frame_times_by_inv[inv_frame_time]
+				if not previous then
+					previous = {0, 0.0}
+				end
+				frame_times_by_inv[inv_frame_time] = {previous[1]+1, previous[2]+frame_time}
+			end
 		end
 	end
 	
@@ -167,13 +193,13 @@ function RC_Count()
 	
 	fps = num_records / diff_time
 	
-	table.insert(rc_ring, {os.clock(), diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor})
+	table.insert(rc_ring, {os.clock(), diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, frame_times_by_inv})
 	
 	--print(string.format("%.2f %.1f %.5f %.2f %.2f %.2f", diff_time, fps, great_circle_distance, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor))
 end
 
 function RC_Record()
-	table.insert(rc_records, {os.clock(), LATITUDE, LONGITUDE, RC_GROUND_SPEED})
+	table.insert(rc_records, {os.clock(), LATITUDE, LONGITUDE, RC_GROUND_SPEED, RC_FRAME_TIME})
 end
 
 function RC_Analyze()
@@ -195,6 +221,10 @@ function RC_Analyze()
 	fps_sum = 0.0
 	fps_below_threshold = 0
 	
+	rc_inv_frame_time_min = 99999.99
+	rc_inv_frame_time_avg = nil
+	rc_inv_frame_time_max = 0.0
+
 	gs_factor_min = 99999.99
 	gs_factor_avg = nil
 	gs_factor_max = 0.0
@@ -206,6 +236,12 @@ function RC_Analyze()
 	distance_externally_perceived = 0.0
 	distance_error = nil
 	
+	aggregated_frame_times_by_inv = {}
+	rc_hist_inv_frame_times_count = {}
+	rc_hist_inv_frame_times_time_spent = {}
+	rc_time_spent_in_time_dilation = 0.0
+	rc_time_spent_in_time_dilation_percentage = 0.0
+	
 	ring_delete = {}
 	for i,record in ipairs(rc_ring) do
 		record_time = record[1]
@@ -214,6 +250,7 @@ function RC_Analyze()
 		gs_slowest_indicated = record[4]
 		gs_externally_perceived = record[5]
 		gs_factor = record[6]
+		frame_times_by_inv = record[7]
 		
 		age = now - record_time
 		if age >= RC_ANALYZE_MAX_AGE_SECONDS then
@@ -253,6 +290,19 @@ function RC_Analyze()
 			
 			distance_indicated = distance_indicated + (gs_slowest_indicated * diff_time / 3600)
 			distance_externally_perceived = distance_externally_perceived + (gs_externally_perceived * diff_time / 3600)
+			
+			for inv_frame_time, arr in pairs(frame_times_by_inv) do
+				num_frames = arr[1]
+				time_spent = arr[2]
+				
+				--print(string.format("%03d %03d %.3f", inv_frame_time, num_frames, time_spent))
+				
+				aggregated = aggregated_frame_times_by_inv[inv_frame_time]
+				if not aggregated then
+					aggregated = {0, 0.0}
+				end
+				aggregated_frame_times_by_inv[inv_frame_time] = {aggregated[1] + num_frames, aggregated[2] + time_spent}
+			end
 		end
 	end
 	
@@ -274,7 +324,9 @@ function RC_Analyze()
 		return
 	end
 	
-	oldest_record_age = now - oldest_record[1]
+	oldest_record_age = now - oldest_record[1] + oldest_record[2] -- time of record creation - difference; approximate
+	latest_record = rc_ring[#rc_ring]
+	rc_observed_time = latest_record[1] - oldest_record[1] + oldest_record[2] -- approximate
 	
 	distance_error_level = 0
 	if distance_error >= RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 then
@@ -282,6 +334,30 @@ function RC_Analyze()
 	elseif distance_error >= RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 then
 		distance_error_level = 1
 	end
+	
+	rc_hist_inv_frame_times_count = RC_ComputeHistogram(aggregated_frame_times_by_inv, 1)
+	rc_hist_inv_frame_times_time_spent = RC_ComputeHistogram(aggregated_frame_times_by_inv, 2)
+	
+	inv_frame_time_sum = 0.0
+	inv_frame_time_total = 0
+	for inv_frame_time,arr in pairs(aggregated_frame_times_by_inv) do
+		if inv_frame_time <= RC_TIME_DILATION_FRAME_RATE + 0.01 then
+			rc_time_spent_in_time_dilation = rc_time_spent_in_time_dilation + arr[2]
+		end
+		
+		num_frames = arr[1]
+		inv_frame_time_sum = inv_frame_time_sum + num_frames * inv_frame_time
+		inv_frame_time_total = inv_frame_time_total + num_frames
+		if inv_frame_time < rc_inv_frame_time_min then
+			rc_inv_frame_time_min = inv_frame_time
+		end
+		if inv_frame_time > rc_inv_frame_time_max then
+			rc_inv_frame_time_max = inv_frame_time
+		end
+	end
+	
+	rc_time_spent_in_time_dilation_percentage = rc_time_spent_in_time_dilation / rc_observed_time * 100.0
+	rc_inv_frame_time_avg = inv_frame_time_sum / inv_frame_time_total
 	
 	if RC_DEBUG then
 		print(string.format("analyzed data for last %.1f seconds", oldest_record_age))
@@ -331,6 +407,24 @@ function RC_Analyze()
 	end
 end
 
+function RC_ComputeHistogram(data, value_index)
+	-- keys must be unique in data! (direct assignment)
+	
+	local histogram = {}
+	
+	for key,arr in pairs(data) do
+		-- initialize histogram to hold as many elements as the key
+		for i=#histogram,key do
+			table.insert(histogram,0)
+		end
+		
+		-- copy value
+		histogram[key] = arr[value_index]
+	end
+	
+	return histogram
+end
+
 function RC_Draw()
 	if rc_notify_level < 1 or not rc_notification_activated then
 		return
@@ -349,7 +443,7 @@ function RC_OpenWindow()
 		return
 	end
 	
-	rc_window = float_wnd_create(420, 280, 1, true)
+	rc_window = float_wnd_create(420, 380, 1, true)
 	float_wnd_set_title(rc_window, "Reality Check v" .. RC_VERSION)
 	float_wnd_set_imgui_builder(rc_window, "RC_BuildWindow")
 	float_wnd_set_onclose(rc_window, "RC_OnCloseWindow")
@@ -362,10 +456,16 @@ function RC_BuildWindow(wnd, x, y)
 		imgui.TextUnformatted(string.format("No data. Start moving faster than %.0f knots \nindicated GS.", RC_MINIMUM_INDICATED_GROUND_SPEED))
 		return
 	end
+	
+	local width = imgui.GetWindowWidth()
 
 	imgui.TextUnformatted("                min    avg    max")
+	imgui.TextUnformatted(string.format("1/frametime  %6.2f %6.2f %6.2f", rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max))
 	imgui.TextUnformatted(string.format("#frames/1sec %6.2f %6.2f %6.2f", fps_min, fps_avg, fps_max))
 	imgui.TextUnformatted(string.format("GS factor    %6.2f %6.2f %6.2f", gs_factor_min, gs_factor_avg, gs_factor_max))
+	
+	imgui.TextUnformatted("")
+	imgui.TextUnformatted(string.format("%5.2f seconds spent with time dilation (%.1f%%)", rc_time_spent_in_time_dilation, rc_time_spent_in_time_dilation_percentage))
 	
 	imgui.TextUnformatted("")
 	imgui.TextUnformatted(string.format("cum distance %6.2f nm expected by indication", distance_indicated))
@@ -373,7 +473,7 @@ function RC_BuildWindow(wnd, x, y)
 	imgui.TextUnformatted(string.format("             %6.2f nm off expectation", distance_error))
 	
 	imgui.TextUnformatted("")
-	imgui.TextUnformatted(string.format("%3d records analyzed", current_records))
+	imgui.TextUnformatted(string.format("%3d records analyzed covering %4.1f seconds", current_records, rc_observed_time))
 	
 	yellow = 0xFF00FFFF
 	red = 0xFF0000FF
@@ -446,6 +546,20 @@ function RC_BuildWindow(wnd, x, y)
 		imgui.PushStyleColor(imgui.constant.Col.Text, red)
 		imgui.TextUnformatted("Cumulative distance is severely below external perception.")
 		imgui.PopStyleColor()
+	end
+	
+	imgui.TextUnformatted("")
+	
+	local inner_width, inner_height = float_wnd_get_dimensions(wnd)
+    if imgui.TreeNode("Inverse Frame Time Count") then
+		local offset_x, offset_y = imgui.GetCursorScreenPos()
+		imgui.PlotHistogram("", rc_hist_inv_frame_times_count, #rc_hist_inv_frame_times_count, -1, "", FLT_MAX, FLT_MAX, inner_width - offset_x - 10, 120)
+		imgui.TreePop()
+	end
+    if imgui.TreeNode("Inverse Frame Time Spent") then
+		local offset_x, offset_y = imgui.GetCursorScreenPos()
+		imgui.PlotHistogram("", rc_hist_inv_frame_times_time_spent, #rc_hist_inv_frame_times_time_spent, -1, "", FLT_MAX, FLT_MAX, inner_width - offset_x - 10, 120)
+		imgui.TreePop()
 	end
 end
 
