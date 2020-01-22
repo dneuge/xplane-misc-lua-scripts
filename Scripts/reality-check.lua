@@ -43,9 +43,9 @@ RC_ANALYZE_INTERVAL                             = 3    -- analyze at most once e
 RC_ANALYZE_FPS_THRESHOLD                        = 20.0 -- count number of records below this threshold of FPS
 RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL         = 5    -- number of triggering records in analyzed time window to interpret as critical
 
--- - time dilation (assumed to activate at inverse frame time <= RC_TIME_DILATION_FRAME_RATE)
-RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1 =  2.0 -- "warning" level for real time spent with time dilation (seconds)
-RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2 = 10.0 -- "critical" level for real time spent with time dilation (seconds)
+-- - time dilation (assumed to activate at inverse frame time < RC_ZERO_TIME_DILATION_FRAME_RATE)
+RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1 =  2.0 -- "warning" level for real time lost in time dilation (seconds)
+RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2 = 10.0 -- "critical" level for real time lost in time dilation (seconds)
 
 -- - ground speed factor (approximate externally observed time dilation factor)
 RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1         = 0.95 -- "warning" level for average of all records
@@ -72,7 +72,8 @@ RC_DEBUG = false
 
 RC_VERSION = "0.3dev"
 
-RC_TIME_DILATION_FRAME_RATE = 19 -- FPS (floored, inverse frame time) when X-Plane starts time dilation
+RC_ZERO_TIME_DILATION_FRAME_RATE = 20 -- FPS (floored, inverse frame time) which is the minimum to not trigger time dilation
+RC_ZERO_TIME_DILATION_FRAME_TIME = 1.0/RC_ZERO_TIME_DILATION_FRAME_RATE
 
 RC_MEAN_RADIUS_EARTH_METERS = 6371009
 RC_METERS_PER_NAUTICAL_MILE = 1852
@@ -117,6 +118,10 @@ rc_hist_inv_frame_times_count = {}
 rc_hist_inv_frame_times_time_spent = {}
 rc_time_spent_at_low_ift = 0.0
 rc_time_spent_at_low_ift_percentage = 0.0
+rc_num_low_ift_frames = 0
+rc_num_low_ift_frames_percentage = 0.0
+rc_time_lost_in_time_dilation = 0
+rc_time_lost_in_time_dilation_percentage = 0.0
 
 rc_observed_time = 0.0
 
@@ -276,6 +281,10 @@ function RC_Analyze()
 	rc_hist_inv_frame_times_time_spent = {}
 	rc_time_spent_at_low_ift = 0.0
 	rc_time_spent_at_low_ift_percentage = 0.0
+	rc_num_low_ift_frames = 0
+	rc_num_low_ift_frames_percentage = 0.0
+	rc_time_lost_in_time_dilation = 0
+	rc_time_lost_in_time_dilation_percentage = 0.0
 	
 	local aggregated_frame_times_by_inv = {}
 	local gs_factor_sum = 0.0
@@ -380,12 +389,16 @@ function RC_Analyze()
 	
 	local inv_frame_time_sum = 0.0
 	local inv_frame_time_total = 0
+	local num_frames_total = 0
 	for inv_frame_time,arr in pairs(aggregated_frame_times_by_inv) do
-		if inv_frame_time <= RC_TIME_DILATION_FRAME_RATE then
+		local num_frames = arr[1]
+		num_frames_total = num_frames_total + num_frames
+		
+		if inv_frame_time < RC_ZERO_TIME_DILATION_FRAME_RATE then
 			rc_time_spent_at_low_ift = rc_time_spent_at_low_ift + arr[2]
+			rc_num_low_ift_frames = rc_num_low_ift_frames + num_frames
 		end
 		
-		local num_frames = arr[1]
 		inv_frame_time_sum = inv_frame_time_sum + num_frames * inv_frame_time
 		inv_frame_time_total = inv_frame_time_total + num_frames
 		if inv_frame_time < rc_inv_frame_time_min then
@@ -398,6 +411,10 @@ function RC_Analyze()
 	
 	rc_time_spent_at_low_ift_percentage = rc_time_spent_at_low_ift / rc_observed_time * 100.0
 	rc_inv_frame_time_avg = inv_frame_time_sum / inv_frame_time_total
+	
+	rc_num_low_ift_frames_percentage = rc_num_low_ift_frames / num_frames_total * 100.0
+	rc_time_lost_in_time_dilation = rc_time_spent_at_low_ift - rc_num_low_ift_frames * RC_ZERO_TIME_DILATION_FRAME_TIME
+	rc_time_lost_in_time_dilation_percentage = rc_time_lost_in_time_dilation / rc_observed_time * 100.0
 	
 	if RC_DEBUG then
 		print(string.format("analyzed data for last %.1f seconds", oldest_record_age))
@@ -412,17 +429,17 @@ function RC_Analyze()
 	local gsx_warning = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_single_below_threshold1 >= RC_NOTIFICATION_THRESHOLD
 	local gsx_critical = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or(rc_gs_factor_single_below_threshold1 + rc_gs_factor_single_below_threshold2) >= RC_NOTIFICATION_THRESHOLD
 	
-	local dilation_time_spent_warning = rc_time_spent_at_low_ift >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1
-	local dilation_time_spent_critical = rc_time_spent_at_low_ift >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2
+	local dilation_time_warning = rc_time_lost_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1
+	local dilation_time_critical = rc_time_lost_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2
 	
-	if fps_critical or gsx_critical or rc_distance_error_level > 1 or dilation_time_spent_critical then
+	if fps_critical or gsx_critical or rc_distance_error_level > 1 or dilation_time_critical then
 		rc_notify_level = 2
-	elseif fps_warning or gsx_warning or rc_distance_error_level > 0 or dilation_time_spent_warning then
+	elseif fps_warning or gsx_warning or rc_distance_error_level > 0 or dilation_time_warning then
 		rc_notify_level = 1
 	end
 	
 	if rc_logging_analysis_file then
-		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f", now, rc_current_records, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage))
+		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f,%d,%.2f,%.3f,%.2f", now, rc_current_records, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage, rc_num_low_ift_frames, rc_num_low_ift_frames_percentage, rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage))
 	end
 	
 	if rc_notify_level < 1 then
@@ -432,8 +449,8 @@ function RC_Analyze()
 	rc_notification_text = "Time dilation:"
 	local has_preceding_text = false
 	
-	if dilation_time_spent_warning or dilation_time_spent_critical then
-		rc_notification_text = rc_notification_text .. string.format(" active for %.1f seconds (%.1f%%)", rc_time_spent_at_low_ift, rc_time_spent_at_low_ift_percentage)
+	if dilation_time_warning or dilation_time_critical then
+		rc_notification_text = rc_notification_text .. string.format(" lost %.1f seconds (%.1f%%)", rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage)
 		has_preceding_text = true
 	end
 	
@@ -497,7 +514,7 @@ function RC_OpenWindow()
 		return
 	end
 	
-	rc_window = float_wnd_create(420, 380, 1, true)
+	rc_window = float_wnd_create(420, 405, 1, true)
 	float_wnd_set_title(rc_window, "Reality Check v" .. RC_VERSION)
 	float_wnd_set_imgui_builder(rc_window, "RC_BuildWindow")
 	float_wnd_set_onclose(rc_window, "RC_OnCloseWindow")
@@ -523,15 +540,18 @@ function RC_BuildWindow(wnd, x, y)
 	imgui.TextUnformatted(string.format("GS factor    %6.2f %6.2f %6.2f", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max))
 	
 	imgui.TextUnformatted("")
-	if rc_time_spent_at_low_ift >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2 then
+	imgui.TextUnformatted(string.format("%5d frames with low IFT (%.1f%%)", rc_num_low_ift_frames, rc_num_low_ift_frames_percentage))
+	imgui.TextUnformatted(string.format("%5.2f seconds spent at low IFT (%.1f%%)", rc_time_spent_at_low_ift, rc_time_spent_at_low_ift_percentage))
+	
+	if rc_time_lost_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2 then
 		color = red
-	elseif rc_time_spent_at_low_ift >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1 then
+	elseif rc_time_lost_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1 then
 		color = yellow
 	end
 	if color then
 		imgui.PushStyleColor(imgui.constant.Col.Text, color)
 	end
-	imgui.TextUnformatted(string.format("%5.2f seconds spent at low IFT (%.1f%%)", rc_time_spent_at_low_ift, rc_time_spent_at_low_ift_percentage))
+	imgui.TextUnformatted(string.format("%5.2f seconds lost in time dilation (%.1f%%)", rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage))
 	if color then
 		imgui.PopStyleColor()
 		color = nil
@@ -726,7 +746,7 @@ function RC_NewLogFile(log_type)
 		file:write(",,,,,,, \"{ift:[count,sum_frame_time],...}\"\n")
 		file:write("\"record_clock\", \"diff_time\", \"num_frames_1sec\", \"slowest_indicated_gs\", \"externally_perceived_gs\", \"gs_factor\", \"great_circle_distance\", \"frame_times\"\n")
 	elseif log_type == "analysis" then
-		file:write("\"analysis_clock\", \"record_count\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\"\n")
+		file:write("\"analysis_clock\", \"record_count\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\", \"num_low_ift_frames\", \"num_low_ift_frames_percentage\", \"time_lost_in_dilation\", \"time_lost_in_dilation_percentage\"\n")
 	end
 	
 	return file
