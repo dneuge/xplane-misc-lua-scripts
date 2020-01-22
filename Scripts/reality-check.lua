@@ -120,6 +120,13 @@ rc_time_spent_in_time_dilation_percentage = 0.0
 
 rc_observed_time = 0.0
 
+rc_logging_raw_file = nil
+rc_logging_raw_buffer = {}
+rc_logging_ring_file = nil
+rc_logging_ring_buffer = {}
+rc_logging_analysis_file = nil
+rc_logging_analysis_buffer = {}
+
 function RC_GreatCircleDistanceInMetersByHaversine(latitude1, longitude1, latitude2, longitude2)
 	local latitude1Radians = math.rad(latitude1)
 	local longitude1Radians = math.rad(longitude1)
@@ -172,6 +179,10 @@ function RC_Count()
 				frame_times_by_inv[inv_frame_time] = {previous[1]+1, previous[2]+frame_time}
 			end
 		end
+		
+		if rc_logging_raw_file then
+			table.insert(rc_logging_raw_buffer, string.format("%.3f,%.6f,%.6f,%.6f,%.6f",record[1],record[2],record[3],record[4],record[5]))
+		end
 	end
 	
 	rc_records={}
@@ -197,7 +208,29 @@ function RC_Count()
 	
 	local fps = num_records / diff_time
 	
-	table.insert(rc_ring, {os.clock(), diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, frame_times_by_inv, great_circle_distance})
+	local now = os.clock()
+	table.insert(rc_ring, {now, diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, frame_times_by_inv, great_circle_distance})
+	
+	if rc_logging_ring_file then
+		local ift_keys = {}
+		for ift,arr in pairs(frame_times_by_inv) do
+			table.insert(ift_keys, ift)
+		end
+		table.sort(ift_keys)
+		
+		local s_frame_times_by_inv = ""
+		local is_first = true
+		for _,ift in ipairs(ift_keys) do
+			local arr = frame_times_by_inv[ift]
+			if not is_first then
+				s_frame_times_by_inv = s_frame_times_by_inv .. ","
+			end
+			is_first = false
+			s_frame_times_by_inv = s_frame_times_by_inv .. string.format("%d:[%d,%.6f]", ift, arr[1], arr[2])
+		end
+		
+		table.insert(rc_logging_ring_buffer, string.format("%.3f,%.3f,%.2f,%.2f,%.2f,%.4f,%.4f,\"{%s}\"", now, diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, great_circle_distance, s_frame_times_by_inv))
+	end
 	
 	--print(string.format("%.2f %.1f %.5f %.2f %.2f %.2f", diff_time, fps, great_circle_distance, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor))
 end
@@ -386,7 +419,13 @@ function RC_Analyze()
 		rc_notify_level = 2
 	elseif fps_warning or gsx_warning or rc_distance_error_level > 0 or dilation_time_spent_warning then
 		rc_notify_level = 1
-	else
+	end
+	
+	if rc_logging_analysis_file then
+		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f", now, rc_current_records, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_in_time_dilation, rc_observed_time, rc_time_spent_in_time_dilation_percentage))
+	end
+	
+	if rc_notify_level < 1 then
 		return
 	end
 	
@@ -602,6 +641,124 @@ function RC_DisableNotifications()
 	rc_notification_activated = false
 end
 
+function RC_EnableLoggingRaw()
+	if rc_logging_raw_file then
+		return
+	end
+	
+	rc_logging_raw_buffer = {}
+	rc_logging_raw_file = RC_NewLogFile("raw")
+end
+
+function RC_DisableLoggingRaw()
+	if not rc_logging_raw_file then
+		return
+	end
+	
+	RC_EndLogFile(rc_logging_raw_buffer)
+	RC_FlushLogFile(rc_logging_raw_file, rc_logging_raw_buffer)
+	rc_logging_raw_file:close()
+	
+	rc_logging_raw_file = nil
+	rc_logging_raw_buffer = {}
+end
+
+function RC_EnableLoggingRing()
+	if rc_logging_ring_file then
+		return
+	end
+	
+	rc_logging_ring_buffer = {}
+	rc_logging_ring_file = RC_NewLogFile("ring")
+end
+
+function RC_DisableLoggingRing()
+	if not rc_logging_ring_file then
+		return
+	end
+	
+	RC_EndLogFile(rc_logging_ring_buffer)
+	RC_FlushLogFile(rc_logging_ring_file, rc_logging_ring_buffer)
+	rc_logging_ring_file:close()
+	
+	rc_logging_ring_file = nil
+	rc_logging_ring_buffer = {}
+end
+
+function RC_EnableLoggingAnalysis()
+	if rc_logging_analysis_file then
+		return
+	end
+	
+	rc_logging_analysis_buffer = {}
+	rc_logging_analysis_file = RC_NewLogFile("analysis")
+end
+
+function RC_DisableLoggingAnalysis()
+	if not rc_logging_analysis_file then
+		return
+	end
+	
+	RC_EndLogFile(rc_logging_analysis_buffer)
+	RC_FlushLogFile(rc_logging_analysis_file, rc_logging_analysis_buffer)
+	rc_logging_analysis_file:close()
+	
+	rc_logging_analysis_file = nil
+	rc_logging_analysis_buffer = {}
+end
+
+function RC_NewLogFile(log_type)
+	local filename = "RC_" .. os.date("%Y-%m-%d_%H%M%S_") .. log_type
+	local fileextension = ".csv"
+	
+	local file = io.open(filename .. fileextension, "w")
+	
+	file:write("\"Reality Check\"\n")
+	file:write("\"Script version:\",\"", RC_VERSION, "\"\n")
+	file:write("\"Log type:\",\"", log_type, "\"\n")
+	file:write("\"Start time:\",\"", os.date("%Y-%m-%d %H:%M:%S"), "\"\n")
+	file:write("\"LUA clock at start:\",", os.clock(), "\n")
+	file:write("\r\n")
+	
+	if log_type == "raw" then
+		file:write("\"clock\",\"latitude\",\"longitude\",\"ground_speed_metric\",\"frame_time\"\n")
+	elseif log_type == "ring" then
+		file:write(",,,,,,, \"{ift:[count,sum_frame_time],...}\"\n")
+		file:write("\"record_clock\", \"diff_time\", \"num_frames_1sec\", \"slowest_indicated_gs\", \"externally_perceived_gs\", \"gs_factor\", \"great_circle_distance\", \"frame_times\"\n")
+	elseif log_type == "analysis" then
+		file:write("\"analysis_clock\", \"record_count\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\"\n")
+	end
+	
+	return file
+end
+
+function RC_EndLogFile(buffer)
+	table.insert(buffer, "")
+	table.insert(buffer, "\"End time:\",\"" .. os.date("%Y-%m-%d %H:%M:%S") .. "\"")
+end
+
+function RC_FlushLogFile(file, buffer)
+	for i,line in ipairs(buffer) do
+		file:write(line, "\n")
+		buffer[i] = nil
+	end
+	
+	file:flush()
+end
+
+function RC_FlushLogFiles()
+	if rc_logging_raw_file then
+		RC_FlushLogFile(rc_logging_raw_file, rc_logging_raw_buffer)
+	end
+
+	if rc_logging_ring_file then
+		RC_FlushLogFile(rc_logging_ring_file, rc_logging_ring_buffer)
+	end
+
+	if rc_logging_analysis_file then
+		RC_FlushLogFile(rc_logging_analysis_file, rc_logging_analysis_buffer)
+	end
+end
 
 
 
@@ -612,11 +769,18 @@ end
 
 add_macro("Show Reality Check analysis", "RC_OpenWindow()")
 add_macro("Enable Reality Check notifications", "RC_EnableNotifications()", "RC_DisableNotifications()", rc_macro_default_state_notifications)
+add_macro("Log Reality Check raw data", "RC_EnableLoggingRaw()", "RC_DisableLoggingRaw()", "deactivate")
+add_macro("Log Reality Check ring data", "RC_EnableLoggingRing()", "RC_DisableLoggingRing()", "deactivate")
+add_macro("Log Reality Check analysed data", "RC_EnableLoggingAnalysis()", "RC_DisableLoggingAnalysis()", "deactivate")
 
 do_every_draw("RC_Draw()")
 do_every_frame("RC_Record()")
 do_often("RC_Count()")
 do_often("RC_Analyze()")
+do_sometimes("RC_FlushLogFiles()")
+do_on_exit("RC_DisableLoggingRaw()")
+do_on_exit("RC_DisableLoggingRing()")
+do_on_exit("RC_DisableLoggingAnalysis()")
 
 -- if dev version open window for faster development
 if string.find(RC_VERSION, 'dev') then
