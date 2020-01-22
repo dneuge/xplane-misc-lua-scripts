@@ -115,8 +115,8 @@ rc_window = nil
 
 rc_hist_inv_frame_times_count = {}
 rc_hist_inv_frame_times_time_spent = {}
-rc_time_spent_in_time_dilation = 0.0
-rc_time_spent_in_time_dilation_percentage = 0.0
+rc_time_spent_at_low_ift = 0.0
+rc_time_spent_at_low_ift_percentage = 0.0
 
 rc_observed_time = 0.0
 
@@ -274,8 +274,8 @@ function RC_Analyze()
 	
 	rc_hist_inv_frame_times_count = {}
 	rc_hist_inv_frame_times_time_spent = {}
-	rc_time_spent_in_time_dilation = 0.0
-	rc_time_spent_in_time_dilation_percentage = 0.0
+	rc_time_spent_at_low_ift = 0.0
+	rc_time_spent_at_low_ift_percentage = 0.0
 	
 	local aggregated_frame_times_by_inv = {}
 	local gs_factor_sum = 0.0
@@ -382,7 +382,7 @@ function RC_Analyze()
 	local inv_frame_time_total = 0
 	for inv_frame_time,arr in pairs(aggregated_frame_times_by_inv) do
 		if inv_frame_time <= RC_TIME_DILATION_FRAME_RATE then
-			rc_time_spent_in_time_dilation = rc_time_spent_in_time_dilation + arr[2]
+			rc_time_spent_at_low_ift = rc_time_spent_at_low_ift + arr[2]
 		end
 		
 		local num_frames = arr[1]
@@ -396,7 +396,7 @@ function RC_Analyze()
 		end
 	end
 	
-	rc_time_spent_in_time_dilation_percentage = rc_time_spent_in_time_dilation / rc_observed_time * 100.0
+	rc_time_spent_at_low_ift_percentage = rc_time_spent_at_low_ift / rc_observed_time * 100.0
 	rc_inv_frame_time_avg = inv_frame_time_sum / inv_frame_time_total
 	
 	if RC_DEBUG then
@@ -412,8 +412,8 @@ function RC_Analyze()
 	local gsx_warning = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_single_below_threshold1 >= RC_NOTIFICATION_THRESHOLD
 	local gsx_critical = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or(rc_gs_factor_single_below_threshold1 + rc_gs_factor_single_below_threshold2) >= RC_NOTIFICATION_THRESHOLD
 	
-	local dilation_time_spent_warning = rc_time_spent_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1
-	local dilation_time_spent_critical = rc_time_spent_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2
+	local dilation_time_spent_warning = rc_time_spent_at_low_ift >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1
+	local dilation_time_spent_critical = rc_time_spent_at_low_ift >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2
 	
 	if fps_critical or gsx_critical or rc_distance_error_level > 1 or dilation_time_spent_critical then
 		rc_notify_level = 2
@@ -422,7 +422,7 @@ function RC_Analyze()
 	end
 	
 	if rc_logging_analysis_file then
-		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f", now, rc_current_records, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_in_time_dilation, rc_observed_time, rc_time_spent_in_time_dilation_percentage))
+		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f", now, rc_current_records, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage))
 	end
 	
 	if rc_notify_level < 1 then
@@ -433,7 +433,7 @@ function RC_Analyze()
 	local has_preceding_text = false
 	
 	if dilation_time_spent_warning or dilation_time_spent_critical then
-		rc_notification_text = rc_notification_text .. string.format(" active for %.1f seconds (%.1f%%)", rc_time_spent_in_time_dilation, rc_time_spent_in_time_dilation_percentage)
+		rc_notification_text = rc_notification_text .. string.format(" active for %.1f seconds (%.1f%%)", rc_time_spent_at_low_ift, rc_time_spent_at_low_ift_percentage)
 		has_preceding_text = true
 	end
 	
@@ -523,15 +523,15 @@ function RC_BuildWindow(wnd, x, y)
 	imgui.TextUnformatted(string.format("GS factor    %6.2f %6.2f %6.2f", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max))
 	
 	imgui.TextUnformatted("")
-	if rc_time_spent_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2 then
+	if rc_time_spent_at_low_ift >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2 then
 		color = red
-	elseif rc_time_spent_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1 then
+	elseif rc_time_spent_at_low_ift >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1 then
 		color = yellow
 	end
 	if color then
 		imgui.PushStyleColor(imgui.constant.Col.Text, color)
 	end
-	imgui.TextUnformatted(string.format("%5.2f seconds spent with time dilation (%.1f%%)", rc_time_spent_in_time_dilation, rc_time_spent_in_time_dilation_percentage))
+	imgui.TextUnformatted(string.format("%5.2f seconds spent at low IFT (%.1f%%)", rc_time_spent_at_low_ift, rc_time_spent_at_low_ift_percentage))
 	if color then
 		imgui.PopStyleColor()
 		color = nil
