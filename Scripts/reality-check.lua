@@ -1,5 +1,7 @@
 --- Reality Check
 --- compares locally reported with externally perceived speeds (simulation rate vs. real time)
+---
+--- Repository: https://github.com/dneuge/xplane-misc-lua-scripts
 --- 
 --- What's the issue?
 --- As explained by X-Plane developer Ben Supnik in an excellent blog post [1] some years ago,
@@ -24,9 +26,11 @@
 --- they were actually not required).
 ---
 --- The issue of time dilation has been around for a long time but only lately and solutions such as
---- 3jFPS-wizard or AutoLOD are available to maintain a steady framerate.
+--- 3jFPS-wizard [2] or AutoLOD [3] are available to maintain a steady framerate.
 ---
 --- [1] https://developer.x-plane.com/2017/10/x-plane-11-10-beta-5-ding-dong-the-fps-nag-is-gone-mostly/
+--- [2] https://forums.x-plane.org/index.php?/files/file/43281-3jfps-wizard11/
+--- [3] http://www.x-plane.at/drupal/node/386
 
 
 --- CONFIG START
