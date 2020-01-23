@@ -75,6 +75,10 @@ RC_VERSION = "0.3dev"
 RC_ZERO_TIME_DILATION_FRAME_RATE = 20 -- FPS (floored, inverse frame time) which is the minimum to not trigger time dilation
 RC_ZERO_TIME_DILATION_FRAME_TIME = 1.0/RC_ZERO_TIME_DILATION_FRAME_RATE
 
+RC_WINDOW_WIDTH = 420
+RC_WINDOW_HEIGHT = 440
+RC_WINDOW_OFFSET = 10
+
 RC_MEAN_RADIUS_EARTH_METERS = 6371009
 RC_METERS_PER_NAUTICAL_MILE = 1852
 RC_FACTOR_METERS_PER_SECOND_TO_KNOTS = 3600.0 / RC_METERS_PER_NAUTICAL_MILE
@@ -557,10 +561,11 @@ function RC_OpenWindow()
 		return
 	end
 	
-	rc_window = float_wnd_create(420, 440, 1, true)
+	rc_window = float_wnd_create(RC_WINDOW_WIDTH, RC_WINDOW_HEIGHT, 1, true)
 	float_wnd_set_title(rc_window, "Reality Check v" .. RC_VERSION)
 	float_wnd_set_imgui_builder(rc_window, "RC_BuildWindow")
 	float_wnd_set_onclose(rc_window, "RC_OnCloseWindow")
+	float_wnd_set_position(rc_window, SCREEN_WIDTH - RC_WINDOW_WIDTH - RC_WINDOW_OFFSET, SCREEN_HIGHT - RC_WINDOW_HEIGHT - RC_WINDOW_OFFSET)
 end
 
 function RC_BuildWindow(wnd, x, y)
