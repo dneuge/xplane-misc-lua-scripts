@@ -59,7 +59,7 @@ RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 = 0.75 -- "critical" level in na
 
 -- How many FPS/GS warnings (including critical level) are needed to start notifying user?
 -- Warnings resulting from distance errors and average values are always shown.
-RC_NOTIFICATION_THRESHOLD = 2
+RC_NOTIFICATION_THRESHOLD = 3
 
 -- Where should the notification be printed? (Y coordinate starts at bottom!)
 RC_NOTIFICATION_X = 10
