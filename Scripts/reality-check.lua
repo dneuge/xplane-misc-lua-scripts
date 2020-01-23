@@ -557,7 +557,7 @@ function RC_OpenWindow()
 		return
 	end
 	
-	rc_window = float_wnd_create(420, 405, 1, true)
+	rc_window = float_wnd_create(420, 440, 1, true)
 	float_wnd_set_title(rc_window, "Reality Check v" .. RC_VERSION)
 	float_wnd_set_imgui_builder(rc_window, "RC_BuildWindow")
 	float_wnd_set_onclose(rc_window, "RC_OnCloseWindow")
