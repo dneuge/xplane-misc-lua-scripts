@@ -85,6 +85,7 @@ DataRef("RC_FRAME_TIME", "sim/operation/misc/frame_rate_period", "readonly")
 
 rc_records = {}
 rc_ring = {}
+rc_previous_record_last = nil
 rc_last_analyze = 0.0
 rc_notify_level = 0
 rc_notification_text = ""
@@ -155,18 +156,24 @@ end
 
 function RC_Count()
 	local slowest_indicated_ground_speed_meters_per_second = 9999.99
-	local first_record = nil
 	local last_record = nil
 	local num_records = #rc_records
 	local frame_times_by_inv = {}
 	
+	if num_records <= 0 then
+		return
+	end
+	
+	local first_record = rc_records[1]
+	
+	if not rc_previous_record_last and num_records > 0 then
+		-- first record since script start, use first recorded frame instead
+		rc_previous_record_last = first_record
+	end
+		
 	for i,record in ipairs(rc_records) do
 		local ground_speed_meters_per_second = record[4]
 	
-		if not first_record then
-			first_record = record
-		end
-		
 		last_record = record
 		
 		if ground_speed_meters_per_second < slowest_indicated_ground_speed_meters_per_second then
@@ -192,15 +199,16 @@ function RC_Count()
 	
 	rc_records={}
 	
-	local diff_time = last_record[1] - first_record[1]
+	local diff_time = last_record[1] - first_record[1] + first_record[5]
 	local slowest_indicated_ground_speed = slowest_indicated_ground_speed_meters_per_second * RC_FACTOR_METERS_PER_SECOND_TO_KNOTS
 	
 	if slowest_indicated_ground_speed < RC_MINIMUM_INDICATED_GROUND_SPEED or RC_PAUSED > 0 then
 		-- print(string.format("not calculated: %.2f %.2f %d", slowest_indicated_ground_speed, RC_MINIMUM_INDICATED_GROUND_SPEED, RC_PAUSED))
+		rc_previous_record_last = last_record
 		return
 	end
 	
-	local great_circle_distance = RC_GreatCircleDistanceInMetersByHaversine(first_record[2], first_record[3], last_record[2], last_record[3]) / RC_METERS_PER_NAUTICAL_MILE
+	local great_circle_distance = RC_GreatCircleDistanceInMetersByHaversine(rc_previous_record_last[2], rc_previous_record_last[3], last_record[2], last_record[3]) / RC_METERS_PER_NAUTICAL_MILE
 	local externally_perceived_ground_speed = great_circle_distance / diff_time * 3600
 	local ground_speed_factor = externally_perceived_ground_speed / slowest_indicated_ground_speed
 	
@@ -237,7 +245,7 @@ function RC_Count()
 		table.insert(rc_logging_ring_buffer, string.format("%.3f,%.3f,%.2f,%.2f,%.2f,%.4f,%.4f,\"{%s}\"", now, diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, great_circle_distance, s_frame_times_by_inv))
 	end
 	
-	--print(string.format("%.2f %.1f %.5f %.2f %.2f %.2f", diff_time, fps, great_circle_distance, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor))
+	rc_previous_record_last = last_record
 end
 
 function RC_Record()
@@ -373,7 +381,6 @@ function RC_Analyze()
 		return
 	end
 	
-	local oldest_record_age = now - oldest_record[1] + oldest_record[2] -- time of record creation - difference; approximate
 	local latest_record = rc_ring[#rc_ring]
 	rc_observed_time = latest_record[1] - oldest_record[1] + oldest_record[2] -- approximate
 	
@@ -417,7 +424,7 @@ function RC_Analyze()
 	rc_time_lost_in_time_dilation_percentage = rc_time_lost_in_time_dilation / rc_observed_time * 100.0
 	
 	if RC_DEBUG then
-		print(string.format("analyzed data for last %.1f seconds", oldest_record_age))
+		print(string.format("analyzed data of %.1f seconds", rc_observed_time))
 		print(string.format("#f/1 min %.1f / avg %.1f / max %.1f, WARN: %d", rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold))
 		print(string.format("GSx  min %.2f / avg %.2f / max %.2f, WARN: %d, CRIT: %d", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2))
 		print(string.format("cumulative distance indicated %.2f nm / externally perceived %.2f nm / error %.2f nm / warn level %d", rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level))
