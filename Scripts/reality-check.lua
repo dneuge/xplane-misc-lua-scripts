@@ -102,6 +102,14 @@ rc_inv_frame_time_min = 99999.99
 rc_inv_frame_time_avg = nil
 rc_inv_frame_time_max = 0.0
 
+rc_gs_slowest_indicated_min = 99999.99
+rc_gs_slowest_indicated_avg = nil
+rc_gs_slowest_indicated_max = 0.0
+
+rc_gs_externally_perceived_min = 99999.99
+rc_gs_externally_perceived_avg = nil
+rc_gs_externally_perceived_max = 0.0
+
 rc_gs_factor_min = 99999.99
 rc_gs_factor_avg = nil
 rc_gs_factor_max = 0.0
@@ -274,6 +282,14 @@ function RC_Analyze()
 	rc_inv_frame_time_avg = nil
 	rc_inv_frame_time_max = 0.0
 
+	rc_gs_slowest_indicated_min = 99999.99
+	rc_gs_slowest_indicated_avg = nil
+	rc_gs_slowest_indicated_max = 0.0
+
+	rc_gs_externally_perceived_min = 99999.99
+	rc_gs_externally_perceived_avg = nil
+	rc_gs_externally_perceived_max = 0.0
+
 	rc_gs_factor_min = 99999.99
 	rc_gs_factor_avg = nil
 	rc_gs_factor_max = 0.0
@@ -295,6 +311,8 @@ function RC_Analyze()
 	rc_time_lost_in_time_dilation_percentage = 0.0
 	
 	local aggregated_frame_times_by_inv = {}
+	local gs_slowest_indicated_sum = 0.0
+	local gs_externally_perceived_sum = 0.0
 	local gs_factor_sum = 0.0
 	local fps_sum = 0.0
 	
@@ -330,6 +348,22 @@ function RC_Analyze()
 			if fps < RC_ANALYZE_FPS_THRESHOLD then
 				rc_fps_below_threshold = rc_fps_below_threshold + 1
 			end
+			
+			if gs_slowest_indicated < rc_gs_slowest_indicated_min then
+				rc_gs_slowest_indicated_min = gs_slowest_indicated
+			end
+			if gs_slowest_indicated > rc_gs_slowest_indicated_max then
+				rc_gs_slowest_indicated_max = gs_slowest_indicated
+			end
+			gs_slowest_indicated_sum = gs_slowest_indicated_sum + gs_slowest_indicated
+			
+			if gs_externally_perceived < rc_gs_externally_perceived_min then
+				rc_gs_externally_perceived_min = gs_externally_perceived
+			end
+			if gs_externally_perceived > rc_gs_externally_perceived_max then
+				rc_gs_externally_perceived_max = gs_externally_perceived
+			end
+			gs_externally_perceived_sum = gs_externally_perceived_sum + gs_externally_perceived
 			
 			if gs_factor < rc_gs_factor_min then
 				rc_gs_factor_min = gs_factor
@@ -369,6 +403,8 @@ function RC_Analyze()
 	end
 	
 	rc_fps_avg = fps_sum / rc_current_records
+	rc_gs_slowest_indicated_avg = gs_slowest_indicated_sum / rc_current_records
+	rc_gs_externally_perceived_avg = gs_externally_perceived_sum / rc_current_records
 	rc_gs_factor_avg = gs_factor_sum / rc_current_records
 	rc_distance_error = rc_distance_indicated - rc_distance_externally_perceived
 	
@@ -446,7 +482,7 @@ function RC_Analyze()
 	end
 	
 	if rc_logging_analysis_file then
-		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f,%d,%.2f,%.3f,%.2f", now, rc_current_records, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage, rc_num_low_ift_frames, rc_num_low_ift_frames_percentage, rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage))
+		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f,%d,%.2f,%.3f,%.2f", now, rc_current_records, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_slowest_indicated_min, rc_gs_slowest_indicated_avg, rc_gs_slowest_indicated_max, rc_gs_externally_perceived_min, rc_gs_externally_perceived_avg, rc_gs_externally_perceived_max, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage, rc_num_low_ift_frames, rc_num_low_ift_frames_percentage, rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage))
 	end
 	
 	if rc_notify_level < 1 then
@@ -545,6 +581,8 @@ function RC_BuildWindow(wnd, x, y)
 	imgui.TextUnformatted(string.format("1/frametime  %6.2f %6.2f %6.2f", rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max))
 	imgui.TextUnformatted(string.format("#frames/1sec %6.2f %6.2f %6.2f", rc_fps_min, rc_fps_avg, rc_fps_max))
 	imgui.TextUnformatted(string.format("GS factor    %6.2f %6.2f %6.2f", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max))
+	imgui.TextUnformatted(string.format("GS ind min   %6.1f %6.1f %6.1f", rc_gs_slowest_indicated_min, rc_gs_slowest_indicated_avg, rc_gs_slowest_indicated_max))
+	imgui.TextUnformatted(string.format("GS ext pcvd  %6.1f %6.1f %6.1f", rc_gs_externally_perceived_min, rc_gs_externally_perceived_avg, rc_gs_externally_perceived_max))
 	
 	imgui.TextUnformatted("")
 	imgui.TextUnformatted(string.format("%5d frames with low IFT (%.1f%%)", rc_num_low_ift_frames, rc_num_low_ift_frames_percentage))
@@ -753,7 +791,7 @@ function RC_NewLogFile(log_type)
 		file:write(",,,,,,, \"{ift:[count,sum_frame_time],...}\"\n")
 		file:write("\"record_clock\", \"diff_time\", \"num_frames_1sec\", \"slowest_indicated_gs\", \"externally_perceived_gs\", \"gs_factor\", \"great_circle_distance\", \"frame_times\"\n")
 	elseif log_type == "analysis" then
-		file:write("\"analysis_clock\", \"record_count\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\", \"num_low_ift_frames\", \"num_low_ift_frames_percentage\", \"time_lost_in_dilation\", \"time_lost_in_dilation_percentage\"\n")
+		file:write("\"analysis_clock\", \"record_count\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_ind_slow_min\", \"gs_ind_slow_avg\", \"gs_ind_slow_max\", \"gs_ext_pcvd_min\", \"gs_ext_pcvd_avg\", \"gs_ext_pcvd_max\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\", \"num_low_ift_frames\", \"num_low_ift_frames_percentage\", \"time_lost_in_dilation\", \"time_lost_in_dilation_percentage\"\n")
 	end
 	
 	return file
