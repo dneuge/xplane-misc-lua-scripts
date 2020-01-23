@@ -301,8 +301,8 @@ function RC_Analyze()
 		local frame_times_by_inv = record[7]
 		local great_circle_distance = record[8]
 		
-		local age = now - record_time
-		if age >= RC_ANALYZE_MAX_AGE_SECONDS then
+		local age = now - record_time + diff_time
+		if age > RC_ANALYZE_MAX_AGE_SECONDS then
 			-- record is too old, ignore and remember to delete it
 			table.insert(ring_delete, i)
 		else
