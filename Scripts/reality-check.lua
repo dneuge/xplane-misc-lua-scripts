@@ -74,7 +74,7 @@ RC_DEBUG = false
 
 --- CONFIG END
 
-RC_VERSION = "0.3dev"
+RC_VERSION = "0.3"
 
 RC_ZERO_TIME_DILATION_FRAME_RATE = 20 -- FPS (floored, inverse frame time) which is the minimum to not trigger time dilation
 RC_ZERO_TIME_DILATION_FRAME_TIME = 1.0/RC_ZERO_TIME_DILATION_FRAME_RATE
