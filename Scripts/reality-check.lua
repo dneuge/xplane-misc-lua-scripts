@@ -80,7 +80,7 @@ RC_ZERO_TIME_DILATION_FRAME_RATE = 20 -- FPS (floored, inverse frame time) which
 RC_ZERO_TIME_DILATION_FRAME_TIME = 1.0/RC_ZERO_TIME_DILATION_FRAME_RATE
 
 RC_WINDOW_WIDTH = 420
-RC_WINDOW_HEIGHT = 440
+RC_WINDOW_HEIGHT = 460
 RC_WINDOW_OFFSET = 10
 
 RC_MEAN_RADIUS_EARTH_METERS = 6371009
@@ -89,7 +89,8 @@ RC_FACTOR_METERS_PER_SECOND_TO_KNOTS = 3600.0 / RC_METERS_PER_NAUTICAL_MILE
 
 DataRef("RC_GROUND_SPEED", "sim/flightmodel/position/groundspeed", "readonly")
 DataRef("RC_PAUSED", "sim/time/paused", "readonly")
-DataRef("RC_FRAME_TIME", "sim/operation/misc/frame_rate_period", "readonly")
+DataRef("RC_FRAME_TIME1", "sim/operation/misc/frame_rate_period", "readonly")
+DataRef("RC_FRAME_TIME2", "sim/time/framerate_period", "readonly")
 
 rc_records = {}
 rc_ring = {}
@@ -98,6 +99,7 @@ rc_last_analyze = 0.0
 rc_notify_level = 0
 rc_notification_text = ""
 rc_notification_activated = true
+rc_frame_time_source = 2
 
 rc_current_records = 0
 
@@ -186,7 +188,8 @@ function RC_Count()
 		-- first record since script start, use first recorded frame instead
 		rc_previous_record_last = first_record
 	end
-		
+	
+	local previous_record = rc_previous_record_last
 	for i,record in ipairs(rc_records) do
 		local ground_speed_meters_per_second = record[4]
 	
@@ -197,6 +200,12 @@ function RC_Count()
 		end
 		
 		local frame_time = record[5]
+		if rc_frame_time_source == 3 then
+			-- use external clock instead of X-Plane datarefs
+			-- to base IFT calculation on
+			frame_time = record[1] - previous_record[1]
+		end
+		
 		if frame_time > 0.0 then
 			local inv_frame_time = math.floor(1.0 / frame_time)
 			if inv_frame_time > 0 then
@@ -209,8 +218,10 @@ function RC_Count()
 		end
 		
 		if rc_logging_raw_file then
-			table.insert(rc_logging_raw_buffer, string.format("%.3f,%.6f,%.6f,%.6f,%.6f",record[1],record[2],record[3],record[4],record[5]))
+			table.insert(rc_logging_raw_buffer, string.format("%.3f,%.6f,%.6f,%.6f,%.6f,%d",record[1],record[2],record[3],record[4],record[5],record[6]))
 		end
+		
+		previous_record = record
 	end
 	
 	rc_records={}
@@ -238,7 +249,7 @@ function RC_Count()
 	local fps = num_records / diff_time
 	
 	local now = os.clock()
-	table.insert(rc_ring, {now, diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, frame_times_by_inv, great_circle_distance})
+	table.insert(rc_ring, {now, diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, frame_times_by_inv, great_circle_distance, rc_frame_time_source})
 	
 	if rc_logging_ring_file then
 		local ift_keys = {}
@@ -258,14 +269,21 @@ function RC_Count()
 			s_frame_times_by_inv = s_frame_times_by_inv .. string.format("%d:[%d,%.6f]", ift, arr[1], arr[2])
 		end
 		
-		table.insert(rc_logging_ring_buffer, string.format("%.3f,%.3f,%.2f,%.2f,%.2f,%.4f,%.4f,\"{%s}\"", now, diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, great_circle_distance, s_frame_times_by_inv))
+		table.insert(rc_logging_ring_buffer, string.format("%.3f,%.3f,%.2f,%.2f,%.2f,%.4f,%.4f,%d,\"{%s}\"", now, diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, great_circle_distance, rc_frame_time_source, s_frame_times_by_inv))
 	end
 	
 	rc_previous_record_last = last_record
 end
 
 function RC_Record()
-	table.insert(rc_records, {os.clock(), LATITUDE, LONGITUDE, RC_GROUND_SPEED, RC_FRAME_TIME})
+	local frame_time = nil
+	if rc_frame_time_source == 1 then
+		frame_time = RC_FRAME_TIME1
+	else
+		frame_time = RC_FRAME_TIME2
+	end
+
+	table.insert(rc_records, {os.clock(), LATITUDE, LONGITUDE, RC_GROUND_SPEED, frame_time, rc_frame_time_source})
 end
 
 function RC_Analyze()
@@ -490,7 +508,7 @@ function RC_Analyze()
 	end
 	
 	if rc_logging_analysis_file then
-		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f,%d,%.2f,%.3f,%.2f", now, rc_current_records, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_slowest_indicated_min, rc_gs_slowest_indicated_avg, rc_gs_slowest_indicated_max, rc_gs_externally_perceived_min, rc_gs_externally_perceived_avg, rc_gs_externally_perceived_max, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage, rc_num_low_ift_frames, rc_num_low_ift_frames_percentage, rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage))
+		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f,%d,%.2f,%.3f,%.2f", now, rc_current_records, rc_frame_time_source, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_slowest_indicated_min, rc_gs_slowest_indicated_avg, rc_gs_slowest_indicated_max, rc_gs_externally_perceived_min, rc_gs_externally_perceived_avg, rc_gs_externally_perceived_max, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage, rc_num_low_ift_frames, rc_num_low_ift_frames_percentage, rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage))
 	end
 	
 	if rc_notify_level < 1 then
@@ -501,7 +519,7 @@ function RC_Analyze()
 	local has_preceding_text = false
 	
 	if dilation_time_warning or dilation_time_critical then
-		rc_notification_text = rc_notification_text .. string.format(" lost %.1f seconds (%.1f%%)", rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage)
+		rc_notification_text = rc_notification_text .. string.format(" lost %.1f seconds (%.1f%%) [%d]", rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage, rc_frame_time_source)
 		has_preceding_text = true
 	end
 	
@@ -587,7 +605,7 @@ function RC_BuildWindow(wnd, x, y)
 	local color = nil
 	
 	imgui.TextUnformatted("                min    avg    max")
-	imgui.TextUnformatted(string.format("1/frametime  %6.2f %6.2f %6.2f", rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max))
+	imgui.TextUnformatted(string.format("1/frametime%d %6.2f %6.2f %6.2f", rc_frame_time_source, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max))
 	imgui.TextUnformatted(string.format("#frames/1sec %6.2f %6.2f %6.2f", rc_fps_min, rc_fps_avg, rc_fps_max))
 	imgui.TextUnformatted(string.format("GS factor    %6.2f %6.2f %6.2f", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max))
 	imgui.TextUnformatted(string.format("GS ind min   %6.1f %6.1f %6.1f", rc_gs_slowest_indicated_min, rc_gs_slowest_indicated_avg, rc_gs_slowest_indicated_max))
@@ -701,6 +719,27 @@ function RC_BuildWindow(wnd, x, y)
 		imgui.PlotHistogram("", rc_hist_inv_frame_times_time_spent, #rc_hist_inv_frame_times_time_spent, -1, "", FLT_MAX, FLT_MAX, inner_width - offset_x - 10, 120)
 		imgui.TreePop()
 	end
+	
+    if imgui.TreeNode("Settings") then
+		imgui.TextUnformatted(string.format("Frame time source: [data consistent after %d seconds]", RC_ANALYZE_MAX_AGE_SECONDS))
+		
+        if imgui.RadioButton("dataref frame_rate_period", rc_frame_time_source == 1) then
+            rc_frame_time_source = 1
+        end
+		imgui.TextUnformatted("   (default before v0.4; IFT never below 19)")
+		imgui.TextUnformatted("")
+        if imgui.RadioButton("dataref framerate_period", rc_frame_time_source == 2) then
+            rc_frame_time_source = 2
+        end
+		imgui.TextUnformatted("   (default since v0.4)")
+		imgui.TextUnformatted("")
+        if imgui.RadioButton("LUA clock difference between frames", rc_frame_time_source == 3) then
+            rc_frame_time_source = 3
+        end
+		imgui.TextUnformatted("   (may grow inaccurate in extended sessions)")
+		
+		imgui.TreePop()
+	end
 end
 
 function RC_OnCloseWindow(wnd)
@@ -795,12 +834,12 @@ function RC_NewLogFile(log_type)
 	file:write("\r\n")
 	
 	if log_type == "raw" then
-		file:write("\"clock\",\"latitude\",\"longitude\",\"ground_speed_metric\",\"frame_time\"\n")
+		file:write("\"clock\",\"latitude\",\"longitude\",\"ground_speed_metric\",\"frame_time\",\"frame_time_source\"\n")
 	elseif log_type == "ring" then
-		file:write(",,,,,,, \"{ift:[count,sum_frame_time],...}\"\n")
-		file:write("\"record_clock\", \"diff_time\", \"num_frames_1sec\", \"slowest_indicated_gs\", \"externally_perceived_gs\", \"gs_factor\", \"great_circle_distance\", \"frame_times\"\n")
+		file:write(",,,,,,,, \"{ift:[count,sum_frame_time],...}\"\n")
+		file:write("\"record_clock\", \"diff_time\", \"num_frames_1sec\", \"slowest_indicated_gs\", \"externally_perceived_gs\", \"gs_factor\", \"great_circle_distance\", \"frame_time_source\", \"frame_times\"\n")
 	elseif log_type == "analysis" then
-		file:write("\"analysis_clock\", \"record_count\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_ind_slow_min\", \"gs_ind_slow_avg\", \"gs_ind_slow_max\", \"gs_ext_pcvd_min\", \"gs_ext_pcvd_avg\", \"gs_ext_pcvd_max\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\", \"num_low_ift_frames\", \"num_low_ift_frames_percentage\", \"time_lost_in_dilation\", \"time_lost_in_dilation_percentage\"\n")
+		file:write("\"analysis_clock\", \"record_count\", \"frame_time_source\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_ind_slow_min\", \"gs_ind_slow_avg\", \"gs_ind_slow_max\", \"gs_ext_pcvd_min\", \"gs_ext_pcvd_avg\", \"gs_ext_pcvd_max\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\", \"num_low_ift_frames\", \"num_low_ift_frames_percentage\", \"time_lost_in_dilation\", \"time_lost_in_dilation_percentage\"\n")
 	end
 	
 	return file
