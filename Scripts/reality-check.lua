@@ -80,7 +80,7 @@ RC_ZERO_TIME_DILATION_FRAME_RATE = 20 -- FPS (floored, inverse frame time) which
 RC_ZERO_TIME_DILATION_FRAME_TIME = 1.0/RC_ZERO_TIME_DILATION_FRAME_RATE
 
 RC_WINDOW_WIDTH = 420
-RC_WINDOW_HEIGHT = 460
+RC_WINDOW_HEIGHT = 440
 RC_WINDOW_OFFSET = 10
 
 RC_MEAN_RADIUS_EARTH_METERS = 6371009
@@ -143,6 +143,9 @@ rc_time_lost_in_time_dilation = 0
 rc_time_lost_in_time_dilation_percentage = 0.0
 
 rc_observed_time = 0.0
+
+rc_show_ift_count = true
+rc_show_ift_time_spent = false
 
 rc_logging_raw_file = nil
 rc_logging_raw_buffer = {}
@@ -709,14 +712,34 @@ function RC_BuildWindow(wnd, x, y)
 	imgui.TextUnformatted("")
 	
 	local inner_width, inner_height = float_wnd_get_dimensions(wnd)
-    if imgui.TreeNode("Inverse Frame Time Count") then
-		local offset_x, offset_y = imgui.GetCursorScreenPos()
-		imgui.PlotHistogram("", rc_hist_inv_frame_times_count, #rc_hist_inv_frame_times_count, -1, "", FLT_MAX, FLT_MAX, inner_width - offset_x - 10, 120)
-		imgui.TreePop()
-	end
-    if imgui.TreeNode("Inverse Frame Time Spent") then
-		local offset_x, offset_y = imgui.GetCursorScreenPos()
-		imgui.PlotHistogram("", rc_hist_inv_frame_times_time_spent, #rc_hist_inv_frame_times_time_spent, -1, "", FLT_MAX, FLT_MAX, inner_width - offset_x - 10, 120)
+    if imgui.TreeNode("Inverse Frame Time Histograms") then
+		local has_changed = false
+		local new_value = false
+		
+		imgui.TextUnformatted("Show: ")
+		
+		imgui.SameLine()
+		has_changed, new_value = imgui.Checkbox("Count", rc_show_ift_count)
+		if has_changed then
+			rc_show_ift_count = new_value
+		end
+		
+		imgui.SameLine()
+		has_changed, new_value = imgui.Checkbox("Time spent", rc_show_ift_time_spent)
+		if has_changed then
+			rc_show_ift_time_spent = new_value
+		end
+		
+		if rc_show_ift_count then
+			local offset_x, offset_y = imgui.GetCursorScreenPos()
+			imgui.PlotHistogram("", rc_hist_inv_frame_times_count, #rc_hist_inv_frame_times_count, -1, "Count", FLT_MAX, FLT_MAX, inner_width - offset_x - 10, 120)
+		end
+		
+		if rc_show_ift_time_spent then
+			local offset_x, offset_y = imgui.GetCursorScreenPos()
+			imgui.PlotHistogram("", rc_hist_inv_frame_times_time_spent, #rc_hist_inv_frame_times_time_spent, -1, "Time spent", FLT_MAX, FLT_MAX, inner_width - offset_x - 10, 120)
+		end
+		
 		imgui.TreePop()
 	end
 	
