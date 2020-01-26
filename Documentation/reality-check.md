@@ -26,7 +26,7 @@ The script collects basic data per frame (position, indicated speed, frame time;
 
 An analysis is performed on that aggregated data every 3 seconds by default, including records of the last 30 seconds (analysis log file).
 
-If any issues are detected, a simple text will appear on your screen with triggering criteria in a compressed format (see [Understanding the analysed values (for users)](#understanding-the-analysed-values-for-users)).
+If any issues are detected, a simple text will appear on your screen with triggering criteria in a compressed format (see [Understanding the analysed values](#understanding-the-analysed-values)).
 
 At any time, users can call up the analysis window with detailed information about collected values.
 
@@ -41,7 +41,7 @@ Users can also log data to later submit them to developers or do their own calcu
 
 ## Usage
 
-First, make sure you got [FlyWithLua](https://forums.x-plane.org/index.php?/files/file/38445-flywithlua-ng-next-generation-edition-for-x-plane-11-win-lin-mac/), then copy [Scripts/reality-check.lua](Scripts/reality-check.lua) to the same folder on your FlyWithLua installation. If X-Plane is already running, simply select *Plugins/FlyWithLua/Reload all Lua script files* from the menu.
+First, make sure you got [FlyWithLua](https://forums.x-plane.org/index.php?/files/file/38445-flywithlua-ng-next-generation-edition-for-x-plane-11-win-lin-mac/), then copy [Scripts/reality-check.lua](../Scripts/reality-check.lua) to the same folder on your FlyWithLua installation. If X-Plane is already running, simply select *Plugins/FlyWithLua/Reload all Lua script files* from the menu.
 
 The script will run in the background and display a notification on screen in case it detects any abnormal behaviour.
 
