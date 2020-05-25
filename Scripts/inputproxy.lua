@@ -15,6 +15,7 @@ local aircraft_aliases = {
 	["FFA320U"] = { "FlightFactor A320" },
 	["IXEG733"] = { "IXEG 737 Classic" },
 	["RotateMD80"] = { "Rotate%-MD%-80" },
+	["ToLissA319"] = { "ToLiss319" },
 	["Zibo738"] = { "B737%-800X" },
 }
 
@@ -24,6 +25,14 @@ local aircraft_commands = {
 	--                   repeat  => should command trigger repeatedly? (called "once" in API although it is triggered many times)
 	["default"] = {
 		-- TODO: find reasonable defaults
+		["disconnect_ap"] = {
+			["command"] = "sim/autopilot/servos_fdir_off",
+			["repeat"] = false,
+		},
+		["disconnect_at"] = {
+			["command"] = "sim/autopilot/autothrottle_off",
+			["repeat"] = false,
+		},
 	},
 	
 	["FFA320U"] = {
@@ -55,6 +64,17 @@ local aircraft_commands = {
 		},
 		["disconnect_at"] = {
 			["command"] = "Rotate/md80/autopilot/at_disc",
+			["repeat"] = false,
+		},
+	},
+	
+	["ToLissA319"] = {
+		["disconnect_ap"] = {
+			["command"] = "sim/autopilot/fdir_servos_down_one",
+			["repeat"] = false,
+		},
+		["disconnect_at"] = {
+			["command"] = "sim/autopilot/autothrottle_off",
 			["repeat"] = false,
 		},
 	},
