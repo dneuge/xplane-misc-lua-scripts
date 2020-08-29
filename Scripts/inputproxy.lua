@@ -14,6 +14,7 @@ local aircraft_aliases = {
     -- such as a hyphen, need to be escaped properly; see https://www.lua.org/pil/20.2.html
 	["FFA320U"] = { "FlightFactor A320" },
 	["IXEG733"] = { "IXEG 737 Classic" },
+	["iniA300"] = { "iniSimulations A300" },
 	["RotateMD80"] = { "Rotate%-MD%-80" },
 	["ToLissA319"] = { "ToLiss319" },
 	["Zibo738"] = { "B737%-800X" },
@@ -46,6 +47,17 @@ local aircraft_commands = {
 		},
 	},
 	
+	["iniA300"] = {
+		["disconnect_ap"] = {
+			["command"] = "A300/MCDU/yoke_ap_disconnect_captain",
+			["repeat"] = false,
+		},
+		["disconnect_at"] = {
+			["command"] = "A300/MCDU/disconnect_at",
+			["repeat"] = false,
+		},
+	},
+
 	["IXEG733"] = {
 		["disconnect_ap"] = {
 			["command"] = "ixeg/733/autopilot/AP_disengage",
