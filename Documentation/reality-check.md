@@ -15,6 +15,8 @@ The goal of this script is to experiment with some ways of detecting time dilati
 
 The issue of time dilation has been around for a long time but only lately and solutions such as [3jFPS-wizard](https://forums.x-plane.org/index.php?/files/file/43281-3jfps-wizard11/) or [AutoLOD](http://www.x-plane.at/drupal/node/386) are available to maintain a steady framerate.
 
+In addition to time dilation (aircraft moves slower than indicated) it can also happen that time is accelerated (aircraft moves faster than indicated) which can be detected by ground speed factor and is reported to the user as it causes the same issues on networked environments as time dilation (just in the opposite way).
+
 ## What does the script do?
 
 Reality Check experiments with a number of different metrics to estimate the error caused by time dilation. This is useful in different ways:
@@ -31,6 +33,8 @@ If any issues are detected, a simple text will appear on your screen with trigge
 At any time, users can call up the analysis window with detailed information about collected values.
 
 Users can also log data to later submit them to developers or do their own calculations on collected data. Log files can be opened in any spreadsheet program such as LibreOffice or Excel.
+
+As there have been reports of unintentional time acceleration Reality Check also warns on excessive speeds (much larger than expected) since version 1.0. One possible source is the deliberately set ground speed factor from the Instructor Operator Station (dataref `sim/time/ground_speed_flt`) so an additional warning independent from any calculated values is issued if Reality Check finds that factor to not be at `1.0`.
 
 ## What does the script not do?
 
@@ -119,7 +123,7 @@ The last block shows evaluations based on average values over the total observed
 
 *Inverse Time Histograms* offers you to inspect the number of frames counted by their IFT and the (cumulative) time spent at each frame rate.
 
-In *Settings* you can select an alternate source for frame time calculation. Please only change this option if you understand the effects; read the section about [frame time source](#frame-time-source) below.
+In *Settings* you can temporarily disable the check for deliberate ground speed factor (in case you actually want it and the message annoys you) and you can select an alternate source for frame time calculation. Please change the frame time option only if you understand the effects; read the section about [frame time source](#frame-time-source) below.
 
 ### Text notification
 
