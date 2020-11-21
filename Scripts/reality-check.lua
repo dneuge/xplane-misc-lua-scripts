@@ -28,6 +28,11 @@
 --- The issue of time dilation has been around for a long time but only lately and solutions such as
 --- 3jFPS-wizard [2] or AutoLOD [3] are available to maintain a steady framerate.
 ---
+--- In addition to time dilation (aircraft moves slower than indicated) it can also happen that time
+--- is accelerated (aircraft moves faster than indicated) which can be detected by ground speed factor
+--- and is reported to the user as it causes the same issues on networked environments as time dilation
+--- (just in the opposite way).
+---
 --- [1] https://developer.x-plane.com/2017/10/x-plane-11-10-beta-5-ding-dong-the-fps-nag-is-gone-mostly/
 --- [2] https://forums.x-plane.org/index.php?/files/file/43281-3jfps-wizard11/
 --- [3] http://www.x-plane.at/drupal/node/386
@@ -42,7 +47,7 @@ RC_MINIMUM_INDICATED_GROUND_SPEED               = 10.0 -- minimum indicated GS a
 RC_ANALYZE_MAX_AGE_SECONDS                      = 30.0 -- age of oldest record to analyze
 RC_ANALYZE_INTERVAL                             = 3    -- analyze at most once every x seconds
 
--- Thresholds to trigger warnings for
+-- Thresholds to trigger warnings for:
 -- - frames per second (based on averaged count over 1 second windows)
 RC_ANALYZE_FPS_THRESHOLD                        = 20.0 -- count number of records below this threshold of FPS
 RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL         = 5    -- number of triggering records in analyzed time window to interpret as critical
@@ -51,13 +56,19 @@ RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL         = 5    -- number of triggering r
 RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1 =  2.0 -- "warning" level for real time lost in time dilation (seconds)
 RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2 = 10.0 -- "critical" level for real time lost in time dilation (seconds)
 
--- - ground speed factor (approximate externally observed time dilation factor)
+-- - ground speed underperformance factor (slower than real-time; triggered if below threshold)
 RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1         = 0.95 -- "warning" level for average of all records
 RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2         = 0.85 -- "critical" level for average of all records
 RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD1          = 0.80 -- "warning" level of a single record
 RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD2          = 0.70 -- "critical" level of a single record
 
--- - cumulative error in distance (externally observed cumulative time dilation position error)
+-- - ground speed overperformance factor (faster than real-time; triggered if above threshold)
+RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD1    = 1.05 -- "warning" level for average of all records
+RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD2    = 1.10 -- "critical" level for average of all records
+RC_ANALYZE_GS_OVER_FACTOR_SINGLE_THRESHOLD1     = 1.10 -- "warning" level of a single record
+RC_ANALYZE_GS_OVER_FACTOR_SINGLE_THRESHOLD2     = 1.20 -- "critical" level of a single record
+
+-- - cumulative error in distance (externally observed cumulative position error)
 RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 = 0.30 -- "warning" level in nautical miles
 RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 = 0.75 -- "critical" level in nautical miles
 
@@ -74,7 +85,7 @@ RC_DEBUG = false
 
 --- CONFIG END
 
-RC_VERSION = "0.4"
+RC_VERSION = "0.99.1dev" -- next official release will be 1.0 as the script seems feature complete :)
 
 RC_ZERO_TIME_DILATION_FRAME_RATE = 20 -- FPS (floored, inverse frame time) which is the minimum to not trigger time dilation
 RC_ZERO_TIME_DILATION_FRAME_TIME = 1.0/RC_ZERO_TIME_DILATION_FRAME_RATE
@@ -125,6 +136,10 @@ rc_gs_factor_avg = nil
 rc_gs_factor_max = 0.0
 rc_gs_factor_single_below_threshold1 = 0
 rc_gs_factor_single_below_threshold2 = 0
+rc_gs_over_factor_single_above_threshold1 = 0
+rc_gs_over_factor_single_above_threshold2 = 0
+rc_gs_factor_single_exceeded_thresholds1 = 0 -- combined underperformance + overperformance thresholds level 1
+rc_gs_factor_single_exceeded_thresholds2 = 0 -- combined underperformance + overperformance thresholds level 2
 
 rc_distance_indicated = 0.0
 rc_distance_externally_perceived = 0.0
@@ -242,10 +257,8 @@ function RC_Count()
 	local externally_perceived_ground_speed = great_circle_distance / diff_time * 3600
 	local ground_speed_factor = externally_perceived_ground_speed / slowest_indicated_ground_speed
 	
-	-- limit GS factor to range [0..1]
-	if ground_speed_factor > 1.0 then
-		ground_speed_factor = 1.0
-	elseif ground_speed_factor < 0.0 then
+	-- limit GS factor to positive numbers
+	if ground_speed_factor < 0.0 then
 		ground_speed_factor = 0.0
 	end
 	
@@ -324,6 +337,10 @@ function RC_Analyze()
 	rc_gs_factor_max = 0.0
 	rc_gs_factor_single_below_threshold1 = 0
 	rc_gs_factor_single_below_threshold2 = 0
+	rc_gs_over_factor_single_above_threshold1 = 0
+	rc_gs_over_factor_single_above_threshold2 = 0
+	rc_gs_factor_single_exceeded_thresholds1 = 0
+	rc_gs_factor_single_exceeded_thresholds2 = 0
 	
 	rc_distance_indicated = 0.0
 	rc_distance_externally_perceived = 0.0
@@ -408,6 +425,12 @@ function RC_Analyze()
 				rc_gs_factor_single_below_threshold1 = rc_gs_factor_single_below_threshold1 + 1
 			end
 			
+			if gs_factor >= RC_ANALYZE_GS_OVER_FACTOR_SINGLE_THRESHOLD2 then
+				rc_gs_over_factor_single_above_threshold2 = rc_gs_over_factor_single_above_threshold2 + 1
+			elseif gs_factor >= RC_ANALYZE_GS_OVER_FACTOR_SINGLE_THRESHOLD1 then
+				rc_gs_over_factor_single_above_threshold1 = rc_gs_over_factor_single_above_threshold1 + 1
+			end
+			
 			rc_distance_indicated = rc_distance_indicated + (gs_slowest_indicated * diff_time / 3600)
 			rc_distance_externally_perceived = rc_distance_externally_perceived + great_circle_distance
 			
@@ -435,11 +458,7 @@ function RC_Analyze()
 	rc_gs_slowest_indicated_avg = gs_slowest_indicated_sum / rc_current_records
 	rc_gs_externally_perceived_avg = gs_externally_perceived_sum / rc_current_records
 	rc_gs_factor_avg = gs_factor_sum / rc_current_records
-	rc_distance_error = rc_distance_indicated - rc_distance_externally_perceived
-	
-	if rc_distance_error < 0.0 then
-		rc_distance_error = 0.0
-	end
+	rc_distance_error = math.abs(rc_distance_indicated - rc_distance_externally_perceived)
 	
 	if not oldest_record then
 		--print("no data")
@@ -488,18 +507,21 @@ function RC_Analyze()
 	rc_time_lost_in_time_dilation = rc_time_spent_at_low_ift - rc_num_low_ift_frames * RC_ZERO_TIME_DILATION_FRAME_TIME
 	rc_time_lost_in_time_dilation_percentage = rc_time_lost_in_time_dilation / rc_observed_time * 100.0
 	
+	rc_gs_factor_single_exceeded_thresholds1 = rc_gs_factor_single_below_threshold1 + rc_gs_over_factor_single_above_threshold1
+	rc_gs_factor_single_exceeded_thresholds2 = rc_gs_factor_single_below_threshold2 + rc_gs_over_factor_single_above_threshold2
+	
 	if RC_DEBUG then
 		print(string.format("analyzed data of %.1f seconds", rc_observed_time))
 		print(string.format("#f/1 min %.1f / avg %.1f / max %.1f, WARN: %d", rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold))
-		print(string.format("GSx  min %.2f / avg %.2f / max %.2f, WARN: %d, CRIT: %d", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2))
+		print(string.format("GSx  min %.2f / avg %.2f / max %.2f, WARN: %d/%d, CRIT: %d/%d", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_over_factor_single_above_threshold1, rc_gs_factor_single_below_threshold2, rc_gs_over_factor_single_above_threshold2))
 		print(string.format("cumulative distance indicated %.2f nm / externally perceived %.2f nm / error %.2f nm / warn level %d", rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level))
 	end
 	
 	local fps_warning = rc_fps_below_threshold >= RC_NOTIFICATION_THRESHOLD
 	local fps_critical = rc_fps_below_threshold >= RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL
 	
-	local gsx_warning = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_single_below_threshold1 >= RC_NOTIFICATION_THRESHOLD
-	local gsx_critical = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or(rc_gs_factor_single_below_threshold1 + rc_gs_factor_single_below_threshold2) >= RC_NOTIFICATION_THRESHOLD
+	local gsx_warning = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_single_exceeded_thresholds1 >= RC_NOTIFICATION_THRESHOLD
+	local gsx_critical = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD2 or (rc_gs_factor_single_exceeded_thresholds1 + rc_gs_factor_single_exceeded_thresholds2) >= RC_NOTIFICATION_THRESHOLD
 	
 	local dilation_time_warning = rc_time_lost_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1
 	local dilation_time_critical = rc_time_lost_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2
@@ -511,7 +533,7 @@ function RC_Analyze()
 	end
 	
 	if rc_logging_analysis_file then
-		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f,%d,%.2f,%.3f,%.2f", now, rc_current_records, rc_frame_time_source, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_slowest_indicated_min, rc_gs_slowest_indicated_avg, rc_gs_slowest_indicated_max, rc_gs_externally_perceived_min, rc_gs_externally_perceived_avg, rc_gs_externally_perceived_max, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage, rc_num_low_ift_frames, rc_num_low_ift_frames_percentage, rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage))
+		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f,%d,%.2f,%.3f,%.2f", now, rc_current_records, rc_frame_time_source, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_slowest_indicated_min, rc_gs_slowest_indicated_avg, rc_gs_slowest_indicated_max, rc_gs_externally_perceived_min, rc_gs_externally_perceived_avg, rc_gs_externally_perceived_max, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_gs_over_factor_single_above_threshold1, rc_gs_over_factor_single_above_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage, rc_num_low_ift_frames, rc_num_low_ift_frames_percentage, rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage))
 	end
 	
 	if rc_notify_level < 1 then
@@ -536,7 +558,24 @@ function RC_Analyze()
 			rc_notification_text = rc_notification_text .. " /"
 		end
 	
-		rc_notification_text = rc_notification_text .. string.format(" GSx %.2f/%.2f/%.2f W%d C%d", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2)
+		rc_notification_text = rc_notification_text .. string.format(" GSx %.2f/%.2f/%.2f W%d C%d", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_exceeded_thresholds1, rc_gs_factor_single_exceeded_thresholds2)
+		
+		local gsx_explanation = ""
+		local too_slow = (rc_gs_factor_min <= RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD1) or (rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1)
+		local too_fast = (rc_gs_factor_max >= RC_ANALYZE_GS_OVER_FACTOR_SINGLE_THRESHOLD1) or (rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD1)
+		if too_slow then
+			gsx_explanation = gsx_explanation .. "too slow"
+		end
+		if too_fast then
+			if too_slow then
+				gsx_explanation = gsx_explanation .. " and "
+			end
+			gsx_explanation = gsx_explanation .. "too fast"
+		end
+		if gsx_explanation ~= "" then
+			rc_notification_text = rc_notification_text .. " (" .. gsx_explanation .. ")"
+		end
+		
 		has_preceding_text = true
 	end
 	
@@ -654,25 +693,25 @@ function RC_BuildWindow(wnd, x, y)
 		color = nil
 	end
 	
-	if rc_gs_factor_single_below_threshold1 > 0 then
+	if rc_gs_factor_single_exceeded_thresholds1 > 0 then
 		color = yellow
 	end
 	if color then
 		imgui.PushStyleColor(imgui.constant.Col.Text, color)
 	end
-	imgui.TextUnformatted(string.format("%3d records below GS factor warning threshold", rc_gs_factor_single_below_threshold1))
+	imgui.TextUnformatted(string.format("%3d records exceeded GS factor warning threshold", rc_gs_factor_single_exceeded_thresholds1))
 	if color then
 		imgui.PopStyleColor()
 		color = nil
 	end
 	
-	if rc_gs_factor_single_below_threshold2 > 0 then
+	if rc_gs_factor_single_exceeded_thresholds2 > 0 then
 		color = red
 	end
 	if color then
 		imgui.PushStyleColor(imgui.constant.Col.Text, color)
 	end
-	imgui.TextUnformatted(string.format("%3d records below GS factor critical threshold", rc_gs_factor_single_below_threshold2))
+	imgui.TextUnformatted(string.format("%3d records exceeded GS factor critical threshold", rc_gs_factor_single_exceeded_thresholds2))
 	if color then
 		imgui.PopStyleColor()
 		color = nil
@@ -680,18 +719,18 @@ function RC_BuildWindow(wnd, x, y)
 
 	imgui.TextUnformatted("")
 	
-	local text = "within expected range."
-	if rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 then
+	local text = "is within expected range."
+	if rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD2 then
 		color = red
-		text = "below critical threshold."
-	elseif rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 then
+		text = "exceeds critical threshold."
+	elseif rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD1 then
 		color = yellow
-		text = "below warning threshold."
+		text = "exceeds warning threshold."
 	end
 	if color then
 		imgui.PushStyleColor(imgui.constant.Col.Text, color)
 	end
-	imgui.TextUnformatted("Average GS factor is "..text)
+	imgui.TextUnformatted("Average GS factor "..text)
 	if color then
 		imgui.PopStyleColor()
 		color = nil
@@ -701,11 +740,11 @@ function RC_BuildWindow(wnd, x, y)
 		imgui.TextUnformatted("Cumulative distance is within expected range.")
 	elseif rc_distance_error_level == 1 then
 		imgui.PushStyleColor(imgui.constant.Col.Text, yellow)
-		imgui.TextUnformatted("Cumulative distance is slightly below external perception.")
+		imgui.TextUnformatted("Cumulative distance is slightly off external perception.")
 		imgui.PopStyleColor()
 	else 
 		imgui.PushStyleColor(imgui.constant.Col.Text, red)
-		imgui.TextUnformatted("Cumulative distance is severely below external perception.")
+		imgui.TextUnformatted("Cumulative distance is severely off external perception.")
 		imgui.PopStyleColor()
 	end
 	
@@ -862,7 +901,7 @@ function RC_NewLogFile(log_type)
 		file:write(",,,,,,,, \"{ift:[count,sum_frame_time],...}\"\n")
 		file:write("\"record_clock\", \"diff_time\", \"num_frames_1sec\", \"slowest_indicated_gs\", \"externally_perceived_gs\", \"gs_factor\", \"great_circle_distance\", \"frame_time_source\", \"frame_times\"\n")
 	elseif log_type == "analysis" then
-		file:write("\"analysis_clock\", \"record_count\", \"frame_time_source\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_ind_slow_min\", \"gs_ind_slow_avg\", \"gs_ind_slow_max\", \"gs_ext_pcvd_min\", \"gs_ext_pcvd_avg\", \"gs_ext_pcvd_max\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\", \"num_low_ift_frames\", \"num_low_ift_frames_percentage\", \"time_lost_in_dilation\", \"time_lost_in_dilation_percentage\"\n")
+		file:write("\"analysis_clock\", \"record_count\", \"frame_time_source\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_ind_slow_min\", \"gs_ind_slow_avg\", \"gs_ind_slow_max\", \"gs_ext_pcvd_min\", \"gs_ext_pcvd_avg\", \"gs_ext_pcvd_max\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"gs_over_factor_single_above_threshold1\", \"gs_over_factor_single_above_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\", \"num_low_ift_frames\", \"num_low_ift_frames_percentage\", \"time_lost_in_dilation\", \"time_lost_in_dilation_percentage\"\n")
 	end
 	
 	return file

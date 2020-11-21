@@ -83,9 +83,9 @@ The top section shows various values, displaying minimum (*min*), average (*avg*
 
  - *1/frametime* is also referred to as *Inverse Frame Time* or *IFT* and is an indication of the frame rate determined by dividing a second by the time it took each single frame to be calculated. The number after *frametime* is just an indication of the currently selected frame time source (only useful to developers). Time dilation is believed to affect frames below 20 IFT. This should roughly be what is usually known as "FPS".
  - *#frames/sec* is another way of calculating the frame rate and takes "FPS" literal as it is the number of frames seen in a record, normalized to a period of 1.0 seconds. It will most-likely not match what's known as "FPS" but if the value drops 20 it will be a pretty good guarantee that time dilation is causing some error.
- - *GS factor* shows the factor of your indicated ground speed compared to your actual change in position as observed outside your simulator. A value of 1.0 indicates no time dilation (your externally perceived position/speed matched what is indicated in your simulator). Lower values mean that, when using a real-time clock, you are moving at a slower speed than indicated in your aircraft's avionics.
+ - *GS factor* shows the factor of your indicated ground speed compared to your actual change in position as observed outside your simulator. A value of 1.0 indicates no time dilation or acceleration (your externally perceived position/speed matched what is indicated in your simulator). Lower values mean that, when using a real-time clock, you are moving at a slower speed than indicated in your aircraft's avionics. Higher values indicate that you appear to be affected by some sort of time acceleration. Note that very small deviations such as 0.99 or 1.01 (each meaning you are 1% off real time) are most-likely just calculation errors. In general, small deviations cannot be noticed by external observers such as other pilots or controllers in a networked environment so there is no need to be alarmed by small fluctuations.
  - *GS ind min* (short for "indicated minimum") is the indicated ground speed as displayed in your simulator/avionics. Only the minimum observed per record is taken into consideration.
- - *GS ext pcvd* (short for "externally perceived") is the ground speed based on your system's real-time clock, calculated using the distance covered between two records. If it is lower than your indicated minimum ground speed, time dilation is most-likely in effect and results in a distance error growing over time. The value may exceed the indicated minimum ground speed as it is the average ground speed over the record time window (~1 second) instead of the minimum of the same time period.
+ - *GS ext pcvd* (short for "externally perceived") is the ground speed based on your system's real-time clock, calculated using the distance covered between two records. If it is lower than your indicated minimum ground speed, time dilation is most-likely in effect. If time is either dilated or accelerated the distance error will grow over time. Note that even when running completely at real-time this value may deviate (and exceed) from the indicated minimum ground speed as it is the average ground speed over the record time window (~1 second) instead of the minimum of the same time period.
 
 Next, you see some values calculated from inverse frame time (IFT or "FPS"; only data from observed moving time window of up to 30 seconds is used):
 
@@ -97,25 +97,25 @@ The next block deals with *cum(ulative) distance*:
 
  - *x nm expected by indication* is the distance your aircraft should have covered over the total observation period (up to 30 seconds) if it flew at real-time at its indicated minimum ground speed. The distance is calculated by the sum of indicated minimum ground speed over covered time periods.
  - *x nm externally perceived* is the distance your aircraft has actually covered over the total observation period (up to 30 seconds). This is what others would see your aircraft do when connected to a networked simulation environment with real-time clocks not synchronized to your simulator. The distance is calculated as the sum of great circle distances between positions of each record (at ~1 second intervals).
- - *x nm off expectation* is the difference between expectation by indication and externally perceived distance (up to 30 seconds). This is the error an external observer will see. An error of 1.0 nm would mean that your position (compared over 30 seconds) is one nautical mile behind the position your aircraft should have been at if it had been moved at real-time simulation rate. The error will grow as time dilation gets stronger (i.e. *GS factor* drops) or time dilation continues over a longer period of time (i.e. *seconds lost in time dilation*).
+ - *x nm off expectation* is the absolute difference between expectation by indication and externally perceived distance (up to 30 seconds). This is the error an external observer will see. An error of 1.0 nm would mean that your position (compared over 30 seconds) is one nautical mile behind (if in time dilation) or ahead (if time is accelerated) the position your aircraft should have been at if it had been moved at real-time simulation rate. The error will grow as time dilation gets stronger (i.e. *GS factor* drops) or time dilation or acceleration continues over a longer period of time (see *seconds lost in time dilation*).
 
 The second-to-last block shows evaluations counting records exceeding thresholds of warning criteria:
 
  - *n records analyzed covering x seconds* is just informational and gives you an indication of how much data has been included in the analysis.
  - *n records below #frames/1sec warning threshold* shows how many records saw less than 20 frames during their time period. Keep in mind that this does not match the momentary "FPS" calculated by IFT; think of it more as an "average per second". As explained above, having this value drop below 20 will be a guarantee to see some problems due to time dilation but it is not an accurate method for more detailed time dilation analysis.
- - *n records below GS factor warning threshold* shows how many records dropped below a threshold factor of 0.80 (excluding records of critical threshold).
- - *n records below GS factor critical threshold* shows how many records dropped below a threshold factor of 0.70.
+ - *n records exceeded GS factor warning threshold* shows how many records dropped below a threshold factor of 0.80 (time dilation) or went above 1.10 (time acceleration). The number excludes records which exceeded the critical threshold.
+ - *n records exceeded GS factor critical threshold* shows how many records dropped below a threshold factor of 0.70 (time dilation) or went above 1.20 (time acceleration).
 
 The last block shows evaluations based on average values over the total observed time period (up to 30 seconds):
 
- - *Average GS factor is*
-   - *within expected range*: GS factor is > 0.95 (you are moving at or close to real-time within 5% of your indicated speed)
-   - *below warning threshold*: GS factor is <= 0.95 (you are moving 5% slower than indicated)
-   - *below critical threshold*: GS factor is <= 0.85 (you are moving 15% slower than indicated)
+ - *Average GS factor*
+   - *is within expected range*: GS factor is > 0.95 and < 1.05 (you are moving at or close to real-time within 5% of your indicated speed)
+   - *exceeds warning threshold*: GS factor is <= 0.95 (you are moving 5% slower than indicated) or >= 1.05 (5% faster than indicated)
+   - *exceeds critical threshold*: GS factor is <= 0.85 (you are moving 15% slower than indicated) or >= 1.10 (10% faster than indicated)
  - *Cumulative distance is*
    - *within expected range*: distance error is less than 0.3 nautical miles
-   - *slightly below external perception*: distance error is at least 0.3 nautical miles (external observers may start to notice time dilation)
-   - *severely below external perception*: distance error is at least 0.75 nautical miles (external observers are most-likely influenced by your simulator's time dilation, particularly on final approach)
+   - *slightly off external perception*: distance error is at least 0.3 nautical miles (external observers may start to notice the position error)
+   - *severely off external perception*: distance error is at least 0.75 nautical miles (external observers are most-likely influenced by your simulator's position error, particularly on final approach)
 
 *Inverse Time Histograms* offers you to inspect the number of frames counted by their IFT and the (cumulative) time spent at each frame rate.
 
@@ -134,6 +134,7 @@ Displayed information:
  - *lost x seconds (y%) [z]*: see analysis window *x seconds lost in time dilation (y%)*; *z* indicates the time source (useful for developers)
  - *x nm off expected position*: see analysis window *cum distance x nm off expectation*
  - *GSx x/y/z Wa Cb*: GS factor (see analysis window) has a mininum value of *x*, average value of *y* and maximum value of *z*, *a* records trigger warning condition, *b* records trigger critical condition
+   - an additional explanation *(too slow)*, *(too fast)* or even *(too slow and too fast)* (if different records over the observation period indicated both types) will be added to signify the type of error
  - *#f/s x/y/z Wa*: see analysis window *#frames/1sec* (number of frames seen per record); minimum value is *x*, average *y*, maximum *z*, *a* records trigger warning condition (only shown if at least 5 records exceeded the threshold)
 
 ### Log files
@@ -207,6 +208,8 @@ The analysis log file contains most data shown to user in the analysis window.
 | `gs_factor_max`                                 | maximum ground speed factor                                                                              |
 | `gs_factor_single_below_threshold1`             | number of records with GS factor at or below single record warning threshold (0.80nm)                    |
 | `gs_factor_single_below_threshold2`             | number of records with GS factor at or below single record critical threshold (0.70nm)                   |
+| `gs_over_factor_single_above_threshold1`        | number of records with GS factor at or above single record warning threshold (1.10nm)                    |
+| `gs_over_factor_single_above_threshold2`        | number of records with GS factor at or above single record critical threshold (1.20nm)                   |
 | `distance_expected`                             | cumulative distance in nautical miles as expected by indication                                          |
 | `distance_externally_perceived`                 | cumulative distance in nautical miles actually covered                                                   |
 | `distance_error`                                | distance error in nautical miles                                                                         |
