@@ -206,10 +206,10 @@ The analysis log file contains most data shown to user in the analysis window.
 | `gs_factor_min`                                 | minimum ground speed factor                                                                              |
 | `gs_factor_avg`                                 | average ground speed factor                                                                              |
 | `gs_factor_max`                                 | maximum ground speed factor                                                                              |
-| `gs_factor_single_below_threshold1`             | number of records with GS factor at or below single record warning threshold (0.80nm)                    |
-| `gs_factor_single_below_threshold2`             | number of records with GS factor at or below single record critical threshold (0.70nm)                   |
-| `gs_over_factor_single_above_threshold1`        | number of records with GS factor at or above single record warning threshold (1.10nm)                    |
-| `gs_over_factor_single_above_threshold2`        | number of records with GS factor at or above single record critical threshold (1.20nm)                   |
+| `gs_factor_single_below_threshold1`             | number of records with GS factor at or below single record warning threshold (0.80)                      |
+| `gs_factor_single_below_threshold2`             | number of records with GS factor at or below single record critical threshold (0.70)                     |
+| `gs_over_factor_single_above_threshold1`        | number of records with GS factor at or above single record warning threshold (1.10)                      |
+| `gs_over_factor_single_above_threshold2`        | number of records with GS factor at or above single record critical threshold (1.20)                     |
 | `distance_expected`                             | cumulative distance in nautical miles as expected by indication                                          |
 | `distance_externally_perceived`                 | cumulative distance in nautical miles actually covered                                                   |
 | `distance_error`                                | distance error in nautical miles                                                                         |
@@ -221,6 +221,7 @@ The analysis log file contains most data shown to user in the analysis window.
 | `num_low_ift_frames_percentage`                 | percentage of number of frames with IFT below 20 compared to total number of frames included in analysis |
 | `time_lost_in_dilation`                         | seconds "lost in time dilation" (difference of frame times to 1/20 = 50 milliseconds)                    |
 | `time_lost_in_dilation_percentage`              | percentage of seconds "lost in time dilation" compared to total observed time                            |
+| `num_records_gs_factor_unreliable`              | number of records with imprecise data making GS factor unreliable (related warnings disabled if >0)      |
 
 Note that any change in `frame_time_source` will lead to inconsistent frame time data for a full data cycle (by default approximately 30 seconds).
 

@@ -72,6 +72,12 @@ RC_ANALYZE_GS_OVER_FACTOR_SINGLE_THRESHOLD2     = 1.20 -- "critical" level of a 
 RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD1 = 0.30 -- "warning" level in nautical miles
 RC_ANALYZE_DISTANCE_ERROR_CUMULATIVE_THRESHOLD2 = 0.75 -- "critical" level in nautical miles
 
+-- GS calculations are sensitive to high acceleration (takeoff) or rapid deceleration (max reverse/rejected takeoff?).
+-- When should we ignore GS to avoid false positives?
+-- Example: takeoff acceleration increases GS from 10 to 15 knots between 2 records => change factor of 0.50
+RC_MAXIMUM_INDICATED_GS_CHANGE_FACTOR           = 0.10 -- ignore if change of indicated GS between two records exceeds this factor
+RC_MINIMUM_INDICATED_GS                         = 70   -- ignore if GS is slower (knots)
+
 -- How many FPS/GS warnings (including critical level) are needed to start notifying user?
 -- Warnings resulting from distance errors and average values are always shown.
 RC_NOTIFICATION_THRESHOLD = 3
@@ -156,6 +162,7 @@ rc_num_low_ift_frames = 0
 rc_num_low_ift_frames_percentage = 0.0
 rc_time_lost_in_time_dilation = 0
 rc_time_lost_in_time_dilation_percentage = 0.0
+rc_num_records_gs_factor_unreliable = 0
 
 rc_observed_time = 0.0
 
@@ -355,12 +362,15 @@ function RC_Analyze()
 	rc_num_low_ift_frames_percentage = 0.0
 	rc_time_lost_in_time_dilation = 0
 	rc_time_lost_in_time_dilation_percentage = 0.0
+
+	rc_num_records_gs_factor_unreliable = 0
 	
 	local aggregated_frame_times_by_inv = {}
 	local gs_slowest_indicated_sum = 0.0
 	local gs_externally_perceived_sum = 0.0
 	local gs_factor_sum = 0.0
 	local fps_sum = 0.0
+	local gs_slowest_previous_indicated = -1
 	
 	local ring_delete = {}
 	for i,record in ipairs(rc_ring) do
@@ -383,6 +393,23 @@ function RC_Analyze()
 			end
 			
 			rc_current_records = rc_current_records + 1
+			
+			-- determine if GS is unreliable due to excessive errors
+			if gs_slowest_previous_indicated < 0 then
+				-- first record, initialize
+				gs_slowest_previous_indicated = gs_slowest_indicated
+			end
+			local gs_change_factor = (gs_slowest_indicated - gs_slowest_previous_indicated) / gs_slowest_previous_indicated
+			local gs_change_factor_exceeded = math.abs(gs_change_factor) >= RC_MAXIMUM_INDICATED_GS_CHANGE_FACTOR
+			local gs_too_slow = gs_slowest_indicated < RC_MINIMUM_INDICATED_GS
+			local gs_factor_unreliable = gs_too_slow or gs_change_factor_exceeded
+			if gs_factor_unreliable then
+				rc_num_records_gs_factor_unreliable = rc_num_records_gs_factor_unreliable + 1
+				if RC_DEBUG then
+					print(string.format("GS unreliable: current GS %d, previous GS %d, change factor %.2f", gs_slowest_indicated, gs_slowest_previous_indicated, gs_change_factor))
+				end
+			end
+			gs_slowest_previous_indicated = gs_slowest_indicated
 			
 			if fps < rc_fps_min then
 				rc_fps_min = fps
@@ -419,16 +446,18 @@ function RC_Analyze()
 			end
 			gs_factor_sum = gs_factor_sum + gs_factor
 			
-			if gs_factor <= RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD2 then
-				rc_gs_factor_single_below_threshold2 = rc_gs_factor_single_below_threshold2 + 1
-			elseif gs_factor <= RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD1 then
-				rc_gs_factor_single_below_threshold1 = rc_gs_factor_single_below_threshold1 + 1
-			end
-			
-			if gs_factor >= RC_ANALYZE_GS_OVER_FACTOR_SINGLE_THRESHOLD2 then
-				rc_gs_over_factor_single_above_threshold2 = rc_gs_over_factor_single_above_threshold2 + 1
-			elseif gs_factor >= RC_ANALYZE_GS_OVER_FACTOR_SINGLE_THRESHOLD1 then
-				rc_gs_over_factor_single_above_threshold1 = rc_gs_over_factor_single_above_threshold1 + 1
+			if not gs_factor_unreliable then
+				if gs_factor <= RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD2 then
+					rc_gs_factor_single_below_threshold2 = rc_gs_factor_single_below_threshold2 + 1
+				elseif gs_factor <= RC_ANALYZE_GS_FACTOR_SINGLE_THRESHOLD1 then
+					rc_gs_factor_single_below_threshold1 = rc_gs_factor_single_below_threshold1 + 1
+				end
+				
+				if gs_factor >= RC_ANALYZE_GS_OVER_FACTOR_SINGLE_THRESHOLD2 then
+					rc_gs_over_factor_single_above_threshold2 = rc_gs_over_factor_single_above_threshold2 + 1
+				elseif gs_factor >= RC_ANALYZE_GS_OVER_FACTOR_SINGLE_THRESHOLD1 then
+					rc_gs_over_factor_single_above_threshold1 = rc_gs_over_factor_single_above_threshold1 + 1
+				end
 			end
 			
 			rc_distance_indicated = rc_distance_indicated + (gs_slowest_indicated * diff_time / 3600)
@@ -520,8 +549,12 @@ function RC_Analyze()
 	local fps_warning = rc_fps_below_threshold >= RC_NOTIFICATION_THRESHOLD
 	local fps_critical = rc_fps_below_threshold >= RC_ANALYZE_FPS_THRESHOLD_TIMES_CRITICAL
 	
-	local gsx_warning = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_single_exceeded_thresholds1 >= RC_NOTIFICATION_THRESHOLD
-	local gsx_critical = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD2 or (rc_gs_factor_single_exceeded_thresholds1 + rc_gs_factor_single_exceeded_thresholds2) >= RC_NOTIFICATION_THRESHOLD
+	local gsx_warning = false
+	local gsx_critical = false
+	if rc_num_records_gs_factor_unreliable == 0 then
+		gsx_warning = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_single_exceeded_thresholds1 >= RC_NOTIFICATION_THRESHOLD
+		gsx_critical = rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD2 or (rc_gs_factor_single_exceeded_thresholds1 + rc_gs_factor_single_exceeded_thresholds2) >= RC_NOTIFICATION_THRESHOLD
+	end
 	
 	local dilation_time_warning = rc_time_lost_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD1
 	local dilation_time_critical = rc_time_lost_in_time_dilation >= RC_ANALYZE_TIME_DILATION_ACTIVE_TIME_THRESHOLD2
@@ -533,7 +566,7 @@ function RC_Analyze()
 	end
 	
 	if rc_logging_analysis_file then
-		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f,%d,%.2f,%.3f,%.2f", now, rc_current_records, rc_frame_time_source, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_slowest_indicated_min, rc_gs_slowest_indicated_avg, rc_gs_slowest_indicated_max, rc_gs_externally_perceived_min, rc_gs_externally_perceived_avg, rc_gs_externally_perceived_max, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_gs_over_factor_single_above_threshold1, rc_gs_over_factor_single_above_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage, rc_num_low_ift_frames, rc_num_low_ift_frames_percentage, rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage))
+		table.insert(rc_logging_analysis_buffer, string.format("%.3f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.2f,%d,%.2f,%.3f,%.2f,%d", now, rc_current_records, rc_frame_time_source, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max, rc_fps_min, rc_fps_avg, rc_fps_max, rc_fps_below_threshold, rc_gs_slowest_indicated_min, rc_gs_slowest_indicated_avg, rc_gs_slowest_indicated_max, rc_gs_externally_perceived_min, rc_gs_externally_perceived_avg, rc_gs_externally_perceived_max, rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, rc_gs_factor_single_below_threshold1, rc_gs_factor_single_below_threshold2, rc_gs_over_factor_single_above_threshold1, rc_gs_over_factor_single_above_threshold2, rc_distance_indicated, rc_distance_externally_perceived, rc_distance_error, rc_distance_error_level, rc_time_spent_at_low_ift, rc_observed_time, rc_time_spent_at_low_ift_percentage, rc_num_low_ift_frames, rc_num_low_ift_frames_percentage, rc_time_lost_in_time_dilation, rc_time_lost_in_time_dilation_percentage, rc_num_records_gs_factor_unreliable))
 	end
 	
 	if rc_notify_level < 1 then
@@ -644,12 +677,27 @@ function RC_BuildWindow(wnd, x, y)
 
 	local yellow = 0xFF00FFFF
 	local red = 0xFF0000FF
+	local grey = 0xFFC4C4C4
 	local color = nil
+	
+	local gs_factor_reliable = (rc_num_records_gs_factor_unreliable == 0)
+	local notice_gs_warn_disabled = ""
+	if not gs_factor_reliable then
+		notice_gs_warn_disabled = " (INOP)"
+	end
 	
 	imgui.TextUnformatted("                min    avg    max")
 	imgui.TextUnformatted(string.format("1/frametime%d %6.2f %6.2f %6.2f", rc_frame_time_source, rc_inv_frame_time_min, rc_inv_frame_time_avg, rc_inv_frame_time_max))
 	imgui.TextUnformatted(string.format("#frames/1sec %6.2f %6.2f %6.2f", rc_fps_min, rc_fps_avg, rc_fps_max))
-	imgui.TextUnformatted(string.format("GS factor    %6.2f %6.2f %6.2f", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max))
+	if not gs_factor_reliable then
+		color = grey
+		imgui.PushStyleColor(imgui.constant.Col.Text, color)
+	end
+	imgui.TextUnformatted(string.format("GS factor    %6.2f %6.2f %6.2f%s", rc_gs_factor_min, rc_gs_factor_avg, rc_gs_factor_max, notice_gs_warn_disabled))
+	if color then
+		imgui.PopStyleColor()
+		color = nil
+	end
 	imgui.TextUnformatted(string.format("GS ind min   %6.1f %6.1f %6.1f", rc_gs_slowest_indicated_min, rc_gs_slowest_indicated_avg, rc_gs_slowest_indicated_max))
 	imgui.TextUnformatted(string.format("GS ext pcvd  %6.1f %6.1f %6.1f", rc_gs_externally_perceived_min, rc_gs_externally_perceived_avg, rc_gs_externally_perceived_max))
 	
@@ -693,25 +741,29 @@ function RC_BuildWindow(wnd, x, y)
 		color = nil
 	end
 	
-	if rc_gs_factor_single_exceeded_thresholds1 > 0 then
+	if not gs_factor_reliable then
+		color = grey
+	elseif rc_gs_factor_single_exceeded_thresholds1 > 0 then
 		color = yellow
 	end
 	if color then
 		imgui.PushStyleColor(imgui.constant.Col.Text, color)
 	end
-	imgui.TextUnformatted(string.format("%3d records exceeded GS factor warning threshold", rc_gs_factor_single_exceeded_thresholds1))
+	imgui.TextUnformatted(string.format("%3d records exceeded GS factor warning threshold%s", rc_gs_factor_single_exceeded_thresholds1, notice_gs_warn_disabled))
 	if color then
 		imgui.PopStyleColor()
 		color = nil
 	end
 	
-	if rc_gs_factor_single_exceeded_thresholds2 > 0 then
+	if not gs_factor_reliable then
+		color = grey
+	elseif rc_gs_factor_single_exceeded_thresholds2 > 0 then
 		color = red
 	end
 	if color then
 		imgui.PushStyleColor(imgui.constant.Col.Text, color)
 	end
-	imgui.TextUnformatted(string.format("%3d records exceeded GS factor critical threshold", rc_gs_factor_single_exceeded_thresholds2))
+	imgui.TextUnformatted(string.format("%3d records exceeded GS factor critical threshold%s", rc_gs_factor_single_exceeded_thresholds2, notice_gs_warn_disabled))
 	if color then
 		imgui.PopStyleColor()
 		color = nil
@@ -720,17 +772,21 @@ function RC_BuildWindow(wnd, x, y)
 	imgui.TextUnformatted("")
 	
 	local text = "is within expected range."
-	if rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD2 then
-		color = red
-		text = "exceeds critical threshold."
-	elseif rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD1 then
-		color = yellow
-		text = "exceeds warning threshold."
+	if not gs_factor_reliable then
+		color = grey
+	else
+		if rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD2 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD2 then
+			color = red
+			text = "exceeds critical threshold."
+		elseif rc_gs_factor_avg <= RC_ANALYZE_GS_FACTOR_AVERAGE_THRESHOLD1 or rc_gs_factor_avg >= RC_ANALYZE_GS_OVER_FACTOR_AVERAGE_THRESHOLD1 then
+			color = yellow
+			text = "exceeds warning threshold."
+		end
 	end
 	if color then
 		imgui.PushStyleColor(imgui.constant.Col.Text, color)
 	end
-	imgui.TextUnformatted("Average GS factor "..text)
+	imgui.TextUnformatted("Average GS factor "..text..notice_gs_warn_disabled)
 	if color then
 		imgui.PopStyleColor()
 		color = nil
@@ -748,7 +804,13 @@ function RC_BuildWindow(wnd, x, y)
 		imgui.PopStyleColor()
 	end
 	
-	imgui.TextUnformatted("")
+	if gs_factor_reliable then
+		imgui.TextUnformatted("")
+	else
+		imgui.PushStyleColor(imgui.constant.Col.Text, grey)
+		imgui.TextUnformatted("      INOP = GS factor calculation is currently unreliable")
+		imgui.PopStyleColor()
+	end
 	
 	local inner_width, inner_height = float_wnd_get_dimensions(wnd)
     if imgui.TreeNode("Inverse Frame Time Histograms") then
@@ -901,7 +963,7 @@ function RC_NewLogFile(log_type)
 		file:write(",,,,,,,, \"{ift:[count,sum_frame_time],...}\"\n")
 		file:write("\"record_clock\", \"diff_time\", \"num_frames_1sec\", \"slowest_indicated_gs\", \"externally_perceived_gs\", \"gs_factor\", \"great_circle_distance\", \"frame_time_source\", \"frame_times\"\n")
 	elseif log_type == "analysis" then
-		file:write("\"analysis_clock\", \"record_count\", \"frame_time_source\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_ind_slow_min\", \"gs_ind_slow_avg\", \"gs_ind_slow_max\", \"gs_ext_pcvd_min\", \"gs_ext_pcvd_avg\", \"gs_ext_pcvd_max\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"gs_over_factor_single_above_threshold1\", \"gs_over_factor_single_above_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\", \"num_low_ift_frames\", \"num_low_ift_frames_percentage\", \"time_lost_in_dilation\", \"time_lost_in_dilation_percentage\"\n")
+		file:write("\"analysis_clock\", \"record_count\", \"frame_time_source\", \"ift_min\", \"ift_avg\", \"ift_max\", \"num_frames_1sec_min\", \"num_frames_1sec_avg\", \"num_frames_1sec_max\", \"count_records_num_frames_1sec_below_threshold\", \"gs_ind_slow_min\", \"gs_ind_slow_avg\", \"gs_ind_slow_max\", \"gs_ext_pcvd_min\", \"gs_ext_pcvd_avg\", \"gs_ext_pcvd_max\", \"gs_factor_min\", \"gs_factor_avg\", \"gs_factor_max\", \"gs_factor_single_below_threshold1\", \"gs_factor_single_below_threshold2\", \"gs_over_factor_single_above_threshold1\", \"gs_over_factor_single_above_threshold2\", \"distance_expected\", \"distance_externally_perceived\", \"distance_error\", \"distance_error_level\", \"time_spent_at_low_ift\", \"observed_time\", \"time_spent_at_low_ift_percentage\", \"num_low_ift_frames\", \"num_low_ift_frames_percentage\", \"time_lost_in_dilation\", \"time_lost_in_dilation_percentage\", \"num_records_gs_factor_unreliable\"\n")
 	end
 	
 	return file
