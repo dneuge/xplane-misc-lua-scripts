@@ -86,6 +86,10 @@ RC_NOTIFICATION_THRESHOLD = 3
 RC_NOTIFICATION_X = 10
 RC_NOTIFICATION_Y = 800
 
+-- Reality Check will warn if X-Plane applies a deliberate ground speed factor (controllable through Instructor Operator Station).
+-- How long should that warning remain on screen?
+RC_NOTIFICATION_DELIBERATE_DURATION = 30
+
 -- Print all details to developer console? (users usually don't need this)
 RC_DEBUG = false
 
@@ -108,15 +112,20 @@ DataRef("RC_GROUND_SPEED", "sim/flightmodel/position/groundspeed", "readonly")
 DataRef("RC_PAUSED", "sim/time/paused", "readonly")
 DataRef("RC_FRAME_TIME1", "sim/operation/misc/frame_rate_period", "readonly")
 DataRef("RC_FRAME_TIME2", "sim/time/framerate_period", "readonly")
+DataRef("RC_XP_GROUND_SPEED_FACTOR", "sim/time/ground_speed_flt", "readonly")
 
 rc_records = {}
 rc_ring = {}
 rc_previous_record_last = nil
 rc_last_analyze = 0.0
+rc_check_deliberate = true
+rc_notify_deliberate = false
 rc_notify_level = 0
 rc_notification_text = ""
 rc_notification_activated = true
 rc_frame_time_source = 2
+
+rc_deliberate_active_since = 0
 
 rc_current_records = 0
 
@@ -318,6 +327,20 @@ function RC_Analyze()
 	
 	rc_notify_level = 0
 	rc_notification_text = ""
+	
+	rc_notify_deliberate = false
+	if rc_check_deliberate then
+		if math.abs(1.0 - RC_XP_GROUND_SPEED_FACTOR) <= 0.0000001 then
+			rc_deliberate_active_since = 0
+		else
+			if rc_deliberate_active_since == 0 then
+				rc_deliberate_active_since = now
+			end
+			if (now - rc_deliberate_active_since) < RC_NOTIFICATION_DELIBERATE_DURATION then
+				rc_notify_deliberate = true
+			end
+		end
+	end
 	
 	local oldest_record = nil
 	rc_current_records = 0
@@ -641,6 +664,10 @@ function RC_ComputeHistogram(data, value_index)
 end
 
 function RC_Draw()
+	if rc_notify_deliberate then
+		RC_DrawDeliberateWarning()
+	end
+	
 	if rc_notify_level < 1 or not rc_notification_activated then
 		return
 	end
@@ -651,6 +678,12 @@ function RC_Draw()
 	end
 	
 	draw_string(RC_NOTIFICATION_X, RC_NOTIFICATION_Y, rc_notification_text, color)
+end
+
+function RC_DrawDeliberateWarning()
+	draw_string(RC_NOTIFICATION_X, RC_NOTIFICATION_Y - 12, string.format("Reality Check has detected that your simulator is set up with a deliberate deceleration or acceleration using a ground speed factor of %f.", RC_XP_GROUND_SPEED_FACTOR), "yellow")
+	draw_string(RC_NOTIFICATION_X, RC_NOTIFICATION_Y - 24, "To reset that factor press I to confirm \"Ground Speed\" as 1.0 in Instructor Operator Station (retype value) and check if you have any plugins active which attempt to work around time dilation.", "yellow")
+	draw_string(RC_NOTIFICATION_X, RC_NOTIFICATION_Y - 36, string.format("This message will disappear in %d seconds or when that factor has been reset. You can temporarily disable this check in the analysis window settings.", RC_NOTIFICATION_DELIBERATE_DURATION), "yellow")
 end
 
 function RC_OpenWindow()
@@ -845,6 +878,12 @@ function RC_BuildWindow(wnd, x, y)
 	end
 	
     if imgui.TreeNode("Settings") then
+		changed, newVal = imgui.Checkbox("Warn if deliberate ground speed factor is set", rc_check_deliberate)
+		if changed then
+			rc_check_deliberate = newVal
+		end
+		imgui.TextUnformatted("")
+		
 		imgui.TextUnformatted(string.format("Frame time source: [data consistent after %d seconds]", RC_ANALYZE_MAX_AGE_SECONDS))
 		
         if imgui.RadioButton("dataref frame_rate_period", rc_frame_time_source == 1) then
