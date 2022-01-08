@@ -15,6 +15,7 @@ local aircraft_aliases = {
 	["FelisB742"] = { "747 Felis" },
 	["FFA320U"] = { "FlightFactor A320" },
 	["FJSQ4XP"] = { "FlyJSim_Q4XP" },
+	["HSCL650"] = { "CL650" },
 	["IXEG733"] = { "IXEG 737 Classic" },
 	["iniA300"] = { "iniSimulations A300", "iniSimulations_A310" },
 	["RotateMD80"] = { "Rotate%-MD%-80" },
@@ -69,6 +70,21 @@ local aircraft_commands = {
 		["disconnect_at"] = {
 			-- Q4 has no auto-thrust
 			["command"] = "sim/autopilot/autothrottle_off",
+			["repeat"] = false,
+		},
+	},
+	
+	["HSCL650"] = {
+		-- there also is a stab trim disconnect button on yokes: CL650/contwheel/0/trim_disc
+		["disconnect_ap"] = {
+			["command"] = "CL650/contwheel/0/ap_disc",
+			["repeat"] = false,
+		},
+		["disconnect_at"] = {
+			-- only one button supported for now but both exist:
+			--   CL650/pedestal/throttle/at_disc_L
+			--   CL650/pedestal/throttle/at_disc_R
+			["command"] = "CL650/pedestal/throttle/at_disc_L",
 			["repeat"] = false,
 		},
 	},
