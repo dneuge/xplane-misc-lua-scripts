@@ -12,9 +12,11 @@ local aircraft_aliases = {
 	-- alias => list of possible search strings in path or aircraft file name (first found will match)
 	-- note that these are actually pattern strings which also means that some characters,
     -- such as a hyphen, need to be escaped properly; see https://www.lua.org/pil/20.2.html
+	["FelisB742"] = { "747 Felis" },
 	["FFA320U"] = { "FlightFactor A320" },
+	["FJSQ4XP"] = { "FlyJSim_Q4XP" },
 	["IXEG733"] = { "IXEG 737 Classic" },
-	["iniA300"] = { "iniSimulations A300" },
+	["iniA300"] = { "iniSimulations A300", "iniSimulations_A310" },
 	["RotateMD80"] = { "Rotate%-MD%-80" },
 	["ToLissA319"] = { "ToLiss319" },
 	["Zibo738"] = { "B737%-800X" },
@@ -36,6 +38,18 @@ local aircraft_commands = {
 		},
 	},
 	
+	["FelisB742"] = {
+		["disconnect_ap"] = {
+			["command"] = "sim/autopilot/fdir_toggle",
+			["repeat"] = false,
+		},
+		-- B742 does not appear to have any disconnect buttons on throttles, leave at default (INOP)
+		["disconnect_at"] = {
+			["command"] = "sim/autopilot/autothrottle_off",
+			["repeat"] = false,
+		},
+	},
+	
 	["FFA320U"] = {
 		["disconnect_ap"] = {
 			["command"] = "sim/autopilot/fdir_servos_up_one",
@@ -43,6 +57,18 @@ local aircraft_commands = {
 		},
 		["disconnect_at"] = {
 			["command"] = "a320/Pedestal/EngineDisconnect1_button",
+			["repeat"] = false,
+		},
+	},
+	
+	["FJSQ4XP"] = {
+		["disconnect_ap"] = {
+			["command"] = "FJS/Q4XP/Autopilot/AUTOPILOT_DISCONNECT",
+			["repeat"] = false,
+		},
+		["disconnect_at"] = {
+			-- Q4 has no auto-thrust
+			["command"] = "sim/autopilot/autothrottle_off",
 			["repeat"] = false,
 		},
 	},
