@@ -4,6 +4,7 @@
 
 -- == START OF CONFIGURATION ==
 local proxied_commands = {
+	["control_fd"] = "FD Control Input (CWS, TCS, FD Sync, ...)",
 	["disconnect_ap"] = "AP Disconnect Soft (button on yoke/flightstick)",
 	["disconnect_at"] = "AT Disconnect Soft (button on thrust lever)"
 }
@@ -29,6 +30,10 @@ local aircraft_commands = {
 	--                   repeat  => should command trigger repeatedly? (called "once" in API although it is triggered many times)
 	["default"] = {
 		-- TODO: find reasonable defaults
+		["control_fd"] = {
+			["command"] = "sim/none/none",
+			["repeat"] = false,
+		},
 		["disconnect_ap"] = {
 			["command"] = "sim/autopilot/servos_fdir_off",
 			["repeat"] = false,
@@ -63,6 +68,10 @@ local aircraft_commands = {
 	},
 	
 	["FJSQ4XP"] = {
+		["control_fd"] = {
+			["command"] = "FJS/Q4XP/Autopilot/TCS_Engage",
+			["repeat"] = false,
+		},
 		["disconnect_ap"] = {
 			["command"] = "FJS/Q4XP/Autopilot/AUTOPILOT_DISCONNECT",
 			["repeat"] = false,
@@ -76,6 +85,10 @@ local aircraft_commands = {
 	
 	["HSCL650"] = {
 		-- there also is a stab trim disconnect button on yokes: CL650/contwheel/0/trim_disc
+		["control_fd"] = {
+			["command"] = "CL650/contwheel/0/fd_sync",
+			["repeat"] = false,
+		},
 		["disconnect_ap"] = {
 			["command"] = "CL650/contwheel/0/ap_disc",
 			["repeat"] = false,
