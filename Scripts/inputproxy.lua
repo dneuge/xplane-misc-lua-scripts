@@ -44,9 +44,13 @@ local aircraft_commands = {
 			["repeat"] = false,
 		},
 		["to_ga"] = {
+			-- This command refers to the TO/GA button usually found on thrust levers.
+			-- As every aircraft appears to do this differently and issuing the wrong command
+			-- for TO/GA may have severe effects this is left INOP by default and should be
+			-- configured for every aircraft individually.
 			["command"] = "sim/none/none",
 			["repeat"] = false
-		}
+		},
 	},
 	
 	["FelisB742"] = {
@@ -54,11 +58,12 @@ local aircraft_commands = {
 			["command"] = "sim/autopilot/fdir_toggle",
 			["repeat"] = false,
 		},
-		-- B742 does not appear to have any disconnect buttons on throttles, leave at default (INOP)
+		-- B742 does not appear to have any disconnect buttons on throttles, set INOP
 		["disconnect_at"] = {
-			["command"] = "sim/autopilot/autothrottle_off",
+			["command"] = "sim/none/none",
 			["repeat"] = false,
 		},
+		-- B742 also has no TO/GA button (only mode selector)
 	},
 	
 	["FFA320U"] = {
@@ -70,9 +75,11 @@ local aircraft_commands = {
 			["command"] = "a320/Pedestal/EngineDisconnect1_button",
 			["repeat"] = false,
 		},
+		-- A320 has no TO/GA button (it's a thrust detent instead)
 	},
 	
 	["FJSQ4XP"] = {
+		-- TODO: find command for GA button on throttles
 		["control_fd"] = {
 			["command"] = "FJS/Q4XP/Autopilot/TCS_Engage",
 			["repeat"] = false,
@@ -82,9 +89,13 @@ local aircraft_commands = {
 			["repeat"] = false,
 		},
 		["disconnect_at"] = {
-			-- Q4 has no auto-thrust
-			["command"] = "sim/autopilot/autothrottle_off",
+			-- Q4 has no auto-thrust, set INOP
+			["command"] = "sim/none/none",
 			["repeat"] = false,
+		},
+		["to_ga"] = {
+			["command"] = "sim/autopilot/take_off_go_around",
+			["repeat"] = false
 		},
 	},
 	
@@ -108,10 +119,11 @@ local aircraft_commands = {
 		["to_ga"] = {
 			["command"] = "CL650/pedestal/throttle/toga_L",
 			["repeat"] = false
-		}
+		},
 	},
 	
 	["iniA300"] = {
+		-- TODO: check if there is a CWS button on yokes (A300/MCDU/cws_toggle appears to be FCP)
 		["disconnect_ap"] = {
 			["command"] = "A300/MCDU/yoke_ap_disconnect_captain",
 			["repeat"] = false,
@@ -120,9 +132,17 @@ local aircraft_commands = {
 			["command"] = "A300/MCDU/disconnect_at",
 			["repeat"] = false,
 		},
+		-- TODO: check if realistic - I'm not sure if there really is a TO/GA button
+		--       on A300/A310 throttles or if that's just triggering the "magic screw"
+		--       provided by iniSimulations for convenience?
+		["to_ga"] = {
+			["command"] = "A300/MCDU/takeoff_goaround_trigger",
+			["repeat"] = false
+		},
 	},
 
 	["IXEG733"] = {
+		-- TODO: find command for TO/GA
 		["disconnect_ap"] = {
 			["command"] = "ixeg/733/autopilot/AP_disengage",
 			["repeat"] = false,
@@ -131,6 +151,7 @@ local aircraft_commands = {
 			["command"] = "ixeg/733/autopilot/at_disengage",
 			["repeat"] = false,
 		},
+		-- 737 does not appear to have a CWS button on yokes
 	},
 	
 	["RotateMD80"] = {
@@ -142,6 +163,13 @@ local aircraft_commands = {
 			["command"] = "Rotate/md80/autopilot/at_disc",
 			["repeat"] = false,
 		},
+		-- The command appears to be correct (changes EPR if not already a TO/GA mode) but A/T cannot be armed, it's only either on or off.
+		-- As it's not possible to just arm A/T and activate it via TO/GA, unless doing a GA (and with EPR already set for TO) this probably has no use.
+		-- A/T switch needs to be pressed on MCP anyway; it's not activated by pressing TO/GA.
+		["to_ga"] = {
+			["command"] = "Rotate/md80/autopilot/to_ga_button",
+			["repeat"] = false
+		}
 	},
 	
 	["ToLissA319"] = {
@@ -153,6 +181,7 @@ local aircraft_commands = {
 			["command"] = "sim/autopilot/autothrottle_off",
 			["repeat"] = false,
 		},
+		-- A319 has no TO/GA button (it's a thrust detent instead), set INOP
 	},
 	
 	["Zibo738"] = {
@@ -165,6 +194,12 @@ local aircraft_commands = {
 			["command"] = "laminar/B738/autopilot/right_at_dis_press",
 			["repeat"] = false,
 		},
+		["to_ga"] = {
+			["command"] = "laminar/B738/autopilot/left_toga_press",
+			["repeat"] = false
+		},
+		-- there does not appear to be any CWS button on the yoke, only on MCP (laminar/B738/autopilot/cws_a_press)
+		-- control_fd command refers to yoke, not MCP button, so leave INOP
 	},
 }
 
