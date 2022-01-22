@@ -6,7 +6,8 @@
 local proxied_commands = {
 	["control_fd"] = "FD Control Input (CWS, TCS, FD Sync, ...)",
 	["disconnect_ap"] = "AP Disconnect Soft (button on yoke/flightstick)",
-	["disconnect_at"] = "AT Disconnect Soft (button on thrust lever)"
+	["disconnect_at"] = "AT Disconnect Soft (button on thrust lever)",
+	["to_ga"] = "TO/GA"
 }
 
 local aircraft_aliases = {
@@ -42,6 +43,10 @@ local aircraft_commands = {
 			["command"] = "sim/autopilot/autothrottle_off",
 			["repeat"] = false,
 		},
+		["to_ga"] = {
+			["command"] = "sim/none/none",
+			["repeat"] = false
+		}
 	},
 	
 	["FelisB742"] = {
@@ -100,6 +105,10 @@ local aircraft_commands = {
 			["command"] = "CL650/pedestal/throttle/at_disc_L",
 			["repeat"] = false,
 		},
+		["to_ga"] = {
+			["command"] = "CL650/pedestal/throttle/toga_L",
+			["repeat"] = false
+		}
 	},
 	
 	["iniA300"] = {
@@ -158,9 +167,35 @@ local aircraft_commands = {
 		},
 	},
 }
+
+local command_protection = {
+	-- protection against accidental triggering
+	-- required_num_triggers       => number of required proxy command triggers before command is proxied (only values above 1 make sense)
+	-- retrigger_time_interval_ms  => maximum milliseconds between proxy command triggers before request gets ignored and command re-locked
+	-- keep_unlocked_until_expired => if true, any triggers after unlocking will be instantly allowed within retrigger time interval
+	--                                if false, command will be locked after a single invocation
+	--
+	--                                example: 3 triggers needed within 750ms to unlock
+	--
+	--                                         if true:  first and second triggers get "ignored" (command still locked)
+	--                                                   third trigger is allowed (command unlocked)
+	--                                                   fourth, fifth, ... trigger is allowed as well (command remains unlocked)
+	--                                                   ... unless last trigger was more than 750ms ago (counter gets reset)
+	--
+	--                                         if false: first and second triggers get "ignored" (command still locked)
+	--                                                   third trigger is allowed (command unlocked)
+	--                                                   command gets locked again immediately after that trigger (not just after 750ms)
+	--                                                   fourth and fifth triggers get "ignored" (command locked again; seen as first and second)
+	--                                                   sixth trigger is allowed again (seen as third trigger)
+	["to_ga"] = {
+		["required_num_triggers"] = 3,
+		["retrigger_time_interval_ms"] = 750,
+		["keep_unlocked_until_expired"] = true
+	}
+}
 -- == END OF CONFIGURATION ==
 
-local version = '0.1dev'
+local version = '0.2dev'
 local LOG_PREFIX = "[Input Proxy] "
 
 print(LOG_PREFIX .. "Initializing Input Proxy version " .. version)
@@ -170,6 +205,7 @@ local system_path = nil
 local dir_sep = nil
 local loaded_aircraft_path = ""
 local commands = {}
+local inputproxy_protection = {}
 
 -- register commands (button/key mappings) before we do anything else
 function register_proxied_commands(proxied_commands)
@@ -357,12 +393,135 @@ function inputproxy_run_command(fn, command_config)
 	end
 end
 
+function inputproxy_protection_trigger(proxy_alias)
+	-- registers trigger and checks conditions
+	-- returns true if command is allowed to be proxied, false if not
+	
+	local config = command_protection[proxy_alias]
+	if config == nil then
+		-- protection is not configured for this command, always allow it to be proxied
+		return true
+	end
+	
+	-- check for bad configuration
+	if config["required_num_triggers"] < 2 then
+		print(LOG_PREFIX .. "Command protection number of triggers is implausible (" .. config["required_num_triggers"] .. " ), check configuration: " .. proxy_alias)
+	elseif config["retrigger_time_interval_ms"] < 50 then
+		print(LOG_PREFIX .. "Command protection retrigger interval is implausible (" .. config["retrigger_time_interval_ms"] .. " ms), check configuration: " .. proxy_alias)
+	end
+	
+	local protection = inputproxy_protection[proxy_alias]
+	if protection ~= nil then
+		-- count this trigger event
+		protection["trigger_count"] = protection["trigger_count"] + 1
+	else
+		-- initialize record if not tracked before
+		protection = {
+			["last_triggered"] = 0,
+			["trigger_count"] = 1,
+			["unlocked"] = false
+		}
+	end
+	
+	local now = os.clock()
+	
+	local was_unlocked = protection["unlocked"]
+	local is_allowed = was_unlocked
+	local should_reset = false
+	
+	-- we only have to check for unlocking if the command was still locked before this event
+	if not was_unlocked then
+		local minimum_last_triggered = now - (config["retrigger_time_interval_ms"] / 1000.0)
+	
+		if protection["last_triggered"] < minimum_last_triggered then
+			-- time expired (or protection was not triggered since last lock)
+			print(LOG_PREFIX .. "Command protection will be reset (trigger time): " .. proxy_alias)
+			should_reset = true
+		elseif protection["trigger_count"] >= config["required_num_triggers"] then
+			-- number of triggers reached
+			print(LOG_PREFIX .. "Command protection unlocks: " .. proxy_alias)
+			is_allowed = true
+		else
+			print(LOG_PREFIX .. "Command protection remains locked (trigger " .. protection["trigger_count"] .. " of " .. config["required_num_triggers"] .. "): " .. proxy_alias)
+		end
+	end
+	
+	if should_reset then
+		protection["trigger_count"] = 1
+		protection["unlocked"] = false
+		is_allowed = false
+	end
+	
+	protection["last_triggered"] = now
+	inputproxy_protection[proxy_alias] = protection
+	
+	if not is_allowed then
+		print(LOG_PREFIX .. "Command is protected and locked: " .. proxy_alias)
+	else
+		protection["unlocked"] = true
+	end
+	
+	return is_allowed
+end
+
+function inputproxy_protection_unlocked(proxy_alias)
+	-- only checks if command was previously unlocked (or is unprotected)
+	-- in contrast to inputproxy_protection_trigger this function does not work towards an unlock (useful for command repetitions)
+	-- returns true if command is allowed to be proxied, false if not
+	
+	local config = command_protection[proxy_alias]
+	if config == nil then
+		-- protection is not configured for this command, always allow it to be proxied
+		return true
+	end
+	
+	local protection = inputproxy_protection[proxy_alias]
+	local is_allowed = protection ~= nil and protection["unlocked"]
+	
+	if not is_allowed then
+		print(LOG_PREFIX .. "Command is protected and locked: " .. proxy_alias)
+	end
+	
+	return is_allowed
+end
+
+function inputproxy_protection_lock_again(proxy_alias)
+	-- lock command but only if protection was previously unlocked
+	
+	local config = command_protection[proxy_alias]
+	if config == nil then
+		-- unprotected commands cannot and should not be locked
+		return
+	end
+	
+	local protection = inputproxy_protection[proxy_alias]
+	local was_unlocked = protection ~= nil and protection["unlocked"]
+	if was_unlocked then
+		if config["keep_unlocked_until_expired"] then
+			print(LOG_PREFIX .. "Locking command (instant retriggering allowed): " .. proxy_alias)
+			
+			-- only resetting "unlocked" will trigger re-evaluation of unlock criteria
+			inputproxy_protection[proxy_alias]["unlocked"] = false
+		else
+			print(LOG_PREFIX .. "Locking command (full cycle): " .. proxy_alias)
+			
+			-- removing whole protection info will restart unlock sequence
+			inputproxy_protection[proxy_alias] = nil
+		end
+	end
+end
+
 function inputproxy_command_begin(proxy_alias)
 	print(LOG_PREFIX .. "Pressed: " .. proxy_alias)
 	
 	local command_config = commands[proxy_alias]
 	if command_config == nil then
 		print(LOG_PREFIX .. "Proxy command alias not configured: " .. proxy_alias)
+		return
+	end
+	
+	local is_allowed = inputproxy_protection_trigger(proxy_alias)
+	if not is_allowed then
 		return
 	end
 	
@@ -379,6 +538,11 @@ function inputproxy_command_once(proxy_alias)
 	
 	print(LOG_PREFIX .. "Repeat: " .. proxy_alias)
 	
+	local is_allowed = inputproxy_protection_unlocked(proxy_alias)
+	if not is_allowed then
+		return
+	end
+	
 	inputproxy_run_command(command_once, command_config)
 end
 
@@ -390,6 +554,9 @@ function inputproxy_command_end(proxy_alias)
 		print(LOG_PREFIX .. "Proxy command alias not configured: " .. proxy_alias)
 		return
 	end
+	
+	-- protection should always allow commands to end but may have to lock the command again
+	inputproxy_protection_lock_again(proxy_alias)
 	
 	inputproxy_run_command(command_end, command_config)
 end
