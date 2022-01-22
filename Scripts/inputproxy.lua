@@ -584,6 +584,8 @@ function inputproxy_command_once(proxy_alias)
 end
 
 function inputproxy_command_end(proxy_alias)
+	local command_config = commands[proxy_alias] or {}
+	
 	print(LOG_PREFIX .. "Released: " .. proxy_alias)
 	
 	inputproxy_protection_lock_again(proxy_alias)
