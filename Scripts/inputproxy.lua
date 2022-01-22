@@ -241,6 +241,7 @@ local dir_sep = nil
 local loaded_aircraft_path = ""
 local commands = {}
 local inputproxy_protection = {}
+local inputproxy_allow_release = {}
 
 -- register commands (button/key mappings) before we do anything else
 function register_proxied_commands(proxied_commands)
@@ -560,6 +561,7 @@ function inputproxy_command_begin(proxy_alias)
 		return
 	end
 	
+	inputproxy_allow_release[proxy_alias] = true
 	inputproxy_run_command(command_begin, command_config)
 end
 
@@ -584,14 +586,19 @@ end
 function inputproxy_command_end(proxy_alias)
 	print(LOG_PREFIX .. "Released: " .. proxy_alias)
 	
-	local command_config = commands[proxy_alias]
-	if command_config == nil then
-		print(LOG_PREFIX .. "Proxy command alias not configured: " .. proxy_alias)
-		return
-	end
-	
-	-- protection should always allow commands to end but may have to lock the command again
 	inputproxy_protection_lock_again(proxy_alias)
+	
+	-- prevent release event if there's no open unreleased command event
+	-- if not prevented, this appears to randomly cause some general input freezes
+	-- NOTE: this only has to be checked if protection is configured
+	if command_protection[proxy_alias] ~= nil then
+		local allow_release = (inputproxy_allow_release[proxy_alias] ~= nil)
+		inputproxy_allow_release[proxy_alias] = nil
+		if not allow_release then
+			print(LOG_PREFIX .. "Release is not allowed (protection configured without open event): " .. proxy_alias)
+			return
+		end
+	end
 	
 	inputproxy_run_command(command_end, command_config)
 end
