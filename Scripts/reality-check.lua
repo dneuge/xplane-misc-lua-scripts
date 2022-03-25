@@ -74,7 +74,7 @@ RC_DEBUG = false
 
 --- CONFIG END
 
-RC_VERSION = "0.4"
+RC_VERSION = "0.4dev"
 
 RC_ZERO_TIME_DILATION_FRAME_RATE = 20 -- FPS (floored, inverse frame time) which is the minimum to not trigger time dilation
 RC_ZERO_TIME_DILATION_FRAME_TIME = 1.0/RC_ZERO_TIME_DILATION_FRAME_RATE
@@ -91,6 +91,8 @@ DataRef("RC_GROUND_SPEED", "sim/flightmodel/position/groundspeed", "readonly")
 DataRef("RC_PAUSED", "sim/time/paused", "readonly")
 DataRef("RC_FRAME_TIME1", "sim/operation/misc/frame_rate_period", "readonly")
 DataRef("RC_FRAME_TIME2", "sim/time/framerate_period", "readonly")
+
+local socket = require 'socket'
 
 rc_records = {}
 rc_ring = {}
@@ -251,7 +253,7 @@ function RC_Count()
 	
 	local fps = num_records / diff_time
 	
-	local now = os.clock()
+	local now = socket.gettime()
 	table.insert(rc_ring, {now, diff_time, fps, slowest_indicated_ground_speed, externally_perceived_ground_speed, ground_speed_factor, frame_times_by_inv, great_circle_distance, rc_frame_time_source})
 	
 	if rc_logging_ring_file then
@@ -286,11 +288,11 @@ function RC_Record()
 		frame_time = RC_FRAME_TIME2
 	end
 
-	table.insert(rc_records, {os.clock(), LATITUDE, LONGITUDE, RC_GROUND_SPEED, frame_time, rc_frame_time_source})
+	table.insert(rc_records, {socket.gettime(), LATITUDE, LONGITUDE, RC_GROUND_SPEED, frame_time, rc_frame_time_source})
 end
 
 function RC_Analyze()
-	local now = os.clock()
+	local now = socket.gettime()
 	if (now - rc_last_analyze) < RC_ANALYZE_INTERVAL then
 		return
 	end
@@ -574,7 +576,7 @@ function RC_Draw()
 	end
 
 	local color = "yellow"
-	if rc_notify_level > 1 and os.clock() % 2 < 1.0 then
+	if rc_notify_level > 1 and socket.gettime() % 2 < 1.0 then
 		color = "red"
 	end
 	
@@ -853,7 +855,7 @@ function RC_NewLogFile(log_type)
 	file:write("\"Script version:\",\"", RC_VERSION, "\"\n")
 	file:write("\"Log type:\",\"", log_type, "\"\n")
 	file:write("\"Start time:\",\"", os.date("%Y-%m-%d %H:%M:%S"), "\"\n")
-	file:write("\"LUA clock at start:\",", os.clock(), "\n")
+	file:write("\"LUA clock at start:\",", socket.gettime(), "\n")
 	file:write("\r\n")
 	
 	if log_type == "raw" then
