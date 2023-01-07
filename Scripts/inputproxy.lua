@@ -32,7 +32,7 @@ local aircraft_commands = {
 	["default"] = {
 		-- TODO: find reasonable defaults
 		["control_fd"] = {
-			["command"] = "sim/none/none",
+			["command"] = "",
 			["repeat"] = false,
 		},
 		["disconnect_ap"] = {
@@ -48,7 +48,7 @@ local aircraft_commands = {
 			-- As every aircraft appears to do this differently and issuing the wrong command
 			-- for TO/GA may have severe effects this is left INOP by default and should be
 			-- configured for every aircraft individually.
-			["command"] = "sim/none/none",
+			["command"] = "",
 			["repeat"] = false
 		},
 	},
@@ -60,7 +60,7 @@ local aircraft_commands = {
 		},
 		-- B742 does not appear to have any disconnect buttons on throttles, set INOP
 		["disconnect_at"] = {
-			["command"] = "sim/none/none",
+			["command"] = "",
 			["repeat"] = false,
 		},
 		-- B742 also has no TO/GA button (only mode selector)
@@ -90,7 +90,7 @@ local aircraft_commands = {
 		},
 		["disconnect_at"] = {
 			-- Q4 has no auto-thrust, set INOP
-			["command"] = "sim/none/none",
+			["command"] = "",
 			["repeat"] = false,
 		},
 		["to_ga"] = {
@@ -554,6 +554,9 @@ function inputproxy_command_begin(proxy_alias)
 	if command_config == nil then
 		print(LOG_PREFIX .. "Proxy command alias not configured: " .. proxy_alias)
 		return
+	elseif command_config["command"] == "" then
+		print(LOG_PREFIX .. "Proxy command has been disabled: " .. proxy_alias)
+		return
 	end
 	
 	local is_allowed = inputproxy_protection_trigger(proxy_alias)
@@ -575,6 +578,11 @@ function inputproxy_command_once(proxy_alias)
 	
 	print(LOG_PREFIX .. "Repeat: " .. proxy_alias)
 	
+	if command_config["command"] == "" then
+		print(LOG_PREFIX .. "Proxy command has been disabled: " .. proxy_alias)
+		return
+	end
+	
 	local is_allowed = inputproxy_protection_unlocked(proxy_alias)
 	if not is_allowed then
 		return
@@ -587,6 +595,11 @@ function inputproxy_command_end(proxy_alias)
 	local command_config = commands[proxy_alias] or {}
 	
 	print(LOG_PREFIX .. "Released: " .. proxy_alias)
+	
+	if command_config["command"] == "" then
+		-- avoid releasing an empty command when disabled
+		return
+	end
 	
 	inputproxy_protection_lock_again(proxy_alias)
 	
