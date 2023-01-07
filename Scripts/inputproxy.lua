@@ -27,7 +27,7 @@ local aircraft_aliases = {
 	["iniA300"] = { "iniSimulations A300", "iniSimulations_A310" },
 	["RotateMD11"] = { "Rotate%-MD%-11" },
 	["RotateMD80"] = { "Rotate%-MD%-80" },
-	["ToLissA319"] = { "ToLiss319" },
+	["ToLissA319"] = { "ToLiss319", "ToLissA319", "ToLissA346" },
 	["Zibo738"] = { "B737%-800X" },
 }
 
