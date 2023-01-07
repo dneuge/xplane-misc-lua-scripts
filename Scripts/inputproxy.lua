@@ -4,9 +4,14 @@
 
 -- == START OF CONFIGURATION ==
 local proxied_commands = {
+	["addon_control"] = "Toggle Addon Control Panel",
 	["control_fd"] = "FD Control Input (CWS, TCS, FD Sync, ...)",
 	["disconnect_ap"] = "AP Disconnect Soft (button on yoke/flightstick)",
 	["disconnect_at"] = "AT Disconnect Soft (button on thrust lever)",
+	["pitch_trim_down_a"] = "Pitch Trim Down, Channel A",
+	["pitch_trim_down_b"] = "Pitch Trim Down, Channel B",
+	["pitch_trim_up_a"] = "Pitch Trim Up, Channel A",
+	["pitch_trim_up_b"] = "Pitch Trim Up, Channel B",
 	["to_ga"] = "TO/GA"
 }
 
@@ -20,6 +25,7 @@ local aircraft_aliases = {
 	["HSCL650"] = { "CL650" },
 	["IXEG733"] = { "IXEG 737 Classic" },
 	["iniA300"] = { "iniSimulations A300", "iniSimulations_A310" },
+	["RotateMD11"] = { "Rotate%-MD%-11" },
 	["RotateMD80"] = { "Rotate%-MD%-80" },
 	["ToLissA319"] = { "ToLiss319" },
 	["Zibo738"] = { "B737%-800X" },
@@ -31,6 +37,10 @@ local aircraft_commands = {
 	--                   repeat  => should command trigger repeatedly? (called "once" in API although it is triggered many times)
 	["default"] = {
 		-- TODO: find reasonable defaults
+		["addon_control"] = {
+			["command"] = "",
+			["repeat"] = false,
+		},
 		["control_fd"] = {
 			["command"] = "",
 			["repeat"] = false,
@@ -41,6 +51,22 @@ local aircraft_commands = {
 		},
 		["disconnect_at"] = {
 			["command"] = "sim/autopilot/autothrottle_off",
+			["repeat"] = false,
+		},
+		["pitch_trim_down_a"] = {
+			["command"] = "sim/flight_controls/pitch_trimA_down",
+			["repeat"] = false,
+		},
+		["pitch_trim_down_b"] = {
+			["command"] = "sim/flight_controls/pitch_trimB_down",
+			["repeat"] = false,
+		},
+		["pitch_trim_up_a"] = {
+			["command"] = "sim/flight_controls/pitch_trimA_up",
+			["repeat"] = false,
+		},
+		["pitch_trim_up_b"] = {
+			["command"] = "sim/flight_controls/pitch_trimA_down",
 			["repeat"] = false,
 		},
 		["to_ga"] = {
@@ -152,6 +178,43 @@ local aircraft_commands = {
 			["repeat"] = false,
 		},
 		-- 737 does not appear to have a CWS button on yokes
+	},
+	
+	["RotateMD11"] = {
+		["addon_control"] = {
+			["command"] = "Rotate/aircraft/ui_c/toggle_aircraft_menu",
+			["repeat"] = false,
+		},
+		["disconnect_ap"] = {
+			["command"] = "Rotate/aircraft/controls_c/ap_disc_l",
+			["repeat"] = false,
+		},
+		["disconnect_at"] = {
+			["command"] = "Rotate/aircraft/controls_c/ats_disc_l",
+			["repeat"] = false,
+		},
+		-- Rotate MD11 does not support 2-channel pitch/stab trim
+		-- channels need to be replaced by single trim command issued by one side only
+		["pitch_trim_down_a"] = {
+			["command"] = "sim/flight_controls/pitch_trim_down",
+			["repeat"] = false,
+		},
+		["pitch_trim_down_b"] = {
+			["command"] = "",
+			["repeat"] = false,
+		},
+		["pitch_trim_up_a"] = {
+			["command"] = "sim/flight_controls/pitch_trim_up",
+			["repeat"] = false,
+		},
+		["pitch_trim_up_b"] = {
+			["command"] = "",
+			["repeat"] = false,
+		},
+		["to_ga"] = {
+			["command"] = "Rotate/aircraft/controls_c/to_ga",
+			["repeat"] = false
+		}
 	},
 	
 	["RotateMD80"] = {
