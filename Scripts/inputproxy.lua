@@ -66,7 +66,7 @@ local aircraft_commands = {
 			["repeat"] = false,
 		},
 		["pitch_trim_up_b"] = {
-			["command"] = "sim/flight_controls/pitch_trimA_down",
+			["command"] = "sim/flight_controls/pitch_trimB_up",
 			["repeat"] = false,
 		},
 		["to_ga"] = {
